@@ -1,0 +1,69 @@
+name: Release
+
+# On push to main, scripts/build.sh (CI mode) builds/refreshes the release
+# artifact set. When CHANGELOG.md carries a version that isn't tagged yet, it
+# also builds binaries, tags the version, signs checksums.txt + install
+# scripts with cosign (keyless, via this workflow's OIDC identity), and
+# uploads to R2.
+#
+# NOTE: this file's path is the cosign certificate identity pinned by
+# install.sh and the docs (…/.github/workflows/release.yml@refs/heads/main).
+# Renaming or moving it breaks release verification.
+
+on:
+  push:
+    branches: [ main ]
+
+permissions: {}
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    # Template gate: fresh forks shouldn't attempt releases and fail. Set the
+    # repository variable CI_ENABLED=true once R2 secrets are configured.
+    if: ${{ vars.CI_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write # build.sh pushes the release tag
+      id-token: write # cosign keyless signing
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0 # full history + tags: build.sh checks/pushes release tags
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      # zig cc cross-compiles the static musl release binaries (amd64 + arm64).
+      # First cgo compile builds musl from source; the action caches ~/.cache/zig.
+      - name: Set up Zig
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: 0.16.0
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends rclone
+
+      - name: Build, sign, and release
+        env:
+          VERBOSE: ${{ vars.VERBOSE }}
+          TAILWIND_VERSION: ${{ vars.TAILWIND_VERSION }}
+          DAISYUI_VERSION: ${{ vars.DAISYUI_VERSION }}
+          REFETCH_TOOLS: ${{ vars.REFETCH_TOOLS }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: bash scripts/build.sh
