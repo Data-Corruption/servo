@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"os"
 
-	"sprout/internal/app"
-	"sprout/internal/app/commands"
-	"sprout/internal/build"
+	"servo/internal/app"
+	"servo/internal/app/commands"
+	"servo/internal/build"
 
 	"github.com/urfave/cli/v3"
 )

@@ -1,9 +1,15 @@
 // Theme Management
-// Handles dark/light theme switching with localStorage and system preference support
+// Default light/dark switching with localStorage and system preference
+// support. When the server forces a theme (settings), page_start renders
+// data-theme + data-theme-forced on <html> and this module stands down.
 
-const LIGHT_THEME = 'nord';
-const DARK_THEME = 'forest';
-const THEME_KEY = 'SPROUT_THEME';
+const LIGHT_THEME = 'light';
+const DARK_THEME = 'dark';
+const THEME_KEY = 'SERVO_THEME';
+
+function themeForced() {
+    return document.documentElement.hasAttribute('data-theme-forced');
+}
 
 /** Get current theme, defaulting to system preference */
 export function getTheme() {
@@ -38,6 +44,7 @@ export function toggleTheme() {
 
 /** Initialize theme on page load */
 export function initTheme() {
+    if (themeForced()) return;
     const loadTheme = getTheme();
     document.documentElement.setAttribute('data-theme', loadTheme);
     localStorage.setItem(THEME_KEY, loadTheme);
@@ -45,6 +52,7 @@ export function initTheme() {
 
 /** Setup toggle after DOM is loaded */
 export function setupThemeToggle() {
+    if (themeForced()) return;
     const toggle = document.getElementById('theme-toggle');
     updateThemeToggle();
     if (toggle) {

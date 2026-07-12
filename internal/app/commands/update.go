@@ -11,9 +11,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sprout/internal/app"
-	"sprout/internal/platform/database/config"
-	"sprout/internal/types"
+	"servo/internal/app"
+	"servo/internal/platform/database/config"
+	"servo/internal/types"
 
 	"github.com/urfave/cli/v3"
 )

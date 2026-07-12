@@ -129,7 +129,7 @@ All configuration is done at the top of `scripts/build.sh`:
    ```sh
    ./out/linux-amd64 password add --label admin
    ```
-   You'll be prompted for the password without echo. Scope credentials with `--perms`, e.g. `--perms "admin !server.control"` (all permissions except stop/restart) or `--perms "settings"`. `password list` and `password remove --label X` round out the command. Permissions are a bitmask defined in `internal/types/perms.go` — add your own app-specific bits there.
+   You'll be prompted for the password without echo. Scope credentials with `--perms`, e.g. `--perms "admin !game.restore"` (all permissions except restoring backups) or `--perms "game.control game.backup"`. `password list` and `password remove --label X` round out the command. Permissions are a bitmask defined in `internal/types/perms.go`.
 
 Dev (non CI) builds set the app version to `v.X.X.X` which disables update related features. This is useful for testing / conditionally enabling things you don't want in dev.
 

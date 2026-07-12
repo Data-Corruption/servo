@@ -4,6 +4,7 @@
 import { initTheme, setupThemeToggle } from './theme.js';
 import { initServerControls } from './server.js';
 import { initSettings } from './settings.js';
+import { initDashboard } from './dashboard.js';
 
 // Initialize theme immediately (before DOM ready) to prevent flash
 initTheme();
@@ -13,4 +14,5 @@ document.addEventListener('DOMContentLoaded', () => {
     setupThemeToggle();
     initServerControls();
     initSettings();
+    initDashboard();
 });

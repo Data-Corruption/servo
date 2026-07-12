@@ -249,7 +249,7 @@ sprout/
 
 Routes are behind the session auth middleware automatically (only `/login` and `/assets/` are exempt). Gate state-changing handlers with a permission check, and wrap new pages in the shared `page_start`/`page_end` partials from `shell.html`:
    ```go
-   if err := middleware.RequirePerm(r, types.PermSettings); err != nil {
+   if err := middleware.RequirePerm(r, types.PermServoSettings); err != nil {
        xhttp.Error(r.Context(), w, err)
        return
    }
@@ -315,7 +315,7 @@ The dashboard is protected by a small, few-user session auth stack (`internal/pl
 
 - **Credentials**: created via the `password add` CLI, stored in LMDB config as Argon2id hashes (RFC 9106 parameters). No usernames — each credential is a labeled password, sized for a handful of dashboard users.
 - **Sessions**: in-memory, keyed by the SHA256 of a 256-bit random cookie token, 30-minute sliding expiry. The cookie is HttpOnly, SameSite=Strict, and Secure outside dev builds. A restart triggered from the UI persists the caller's session hash to config so the browser survives the bounce.
-- **Permissions**: each credential carries a bitmask (`internal/types/perms.go`). The starter set is `settings`, `server.control`, and `admin` (all bits); handlers gate writes with `middleware.RequirePerm`. Add app-specific bits to the mask as your routes grow.
+- **Permissions**: each credential carries a bitmask (`internal/types/perms.go`). Servo's set is `game.control`, `game.backup`, `game.restore`, `servo.settings`, `servo.control`, and `admin` (all bits); handlers gate writes with `middleware.RequirePerm`.
 - **CSRF**: same-origin `Origin` header check on all unsafe methods (no token plumbing), plus a JSON content-type requirement for JSON endpoints. Simple and sufficient for a same-origin dashboard.
 - **Rate limiting**: a global limiter on all requests plus a much stricter limiter on failed logins.
 - **Test mode**: `build.sh --test` builds bypass auth entirely (every request gets admin) and isolate storage in `-test` dirs, keeping local dev friction at zero without ever exposing a real install's data.

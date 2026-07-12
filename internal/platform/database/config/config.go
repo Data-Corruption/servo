@@ -2,8 +2,8 @@ package config
 
 import (
 	"errors"
-	"sprout/internal/platform/database"
-	"sprout/internal/types"
+	"servo/internal/platform/database"
+	"servo/internal/types"
 
 	"github.com/Data-Corruption/lmdb-go/wrap"
 )

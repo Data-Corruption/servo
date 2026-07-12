@@ -8,18 +8,19 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
-	"sprout/internal/build"
-	"sprout/internal/platform/database"
-	"sprout/internal/platform/database/config"
+	"servo/internal/build"
+	"servo/internal/ops"
+	"servo/internal/platform/database"
+	"servo/internal/platform/database/config"
 	// --- BEGIN UPDATE CHECK ---
-	"sprout/internal/platform/release"
+	"servo/internal/platform/release"
 	// --- END UPDATE CHECK ---
-	"sprout/internal/platform/secrets"
+	"servo/internal/platform/secrets"
 	// --- BEGIN REMOTE UPDATE ---
-	"sprout/internal/types"
+	"servo/internal/types"
 	// --- END REMOTE UPDATE ---
-	"sprout/internal/ui"
-	"sprout/pkg/x"
+	"servo/internal/ui"
+	"servo/pkg/x"
 	"strconv"
 	"strings"
 	"sync"
@@ -52,11 +53,19 @@ type App struct {
 	ProxyServer *xhttp.Server  // loopback HTTP listener for local reverse proxies (nil when disabled)
 	Secrets     *secrets.Store // self-signed TLS cert (+ any app secret material)
 	UI          *ui.UI
+	Ops         *ops.Runner    // single-flight game server operation runner
+	Poller      *ops.Poller    // TTL-cached game status for the dashboard
+	Sched       *ops.Scheduler // daily restart/backup window; Run() only in service mode
 	BaseURL     string // e.g., "https://localhost:8484"
 	UserAgent  string // e.g., "Mozilla/5.0 (compatible; <Name>/1.2.3; +<ContactURL>)"
 	StorageDir string // (e.g., ~/.<Name>)
 	RuntimeDir string // (e.g., XDG_RUNTIME_DIR/<Name>, fallback to /tmp/<Name>-USER)
 	TempDir    string // (e.g., StorageDir/tmp)
+	// game server dirs (all under StorageDir)
+	DriversDir     string // driver executables, installed over SSH
+	DriverDataDir  string // SERVO_DATA_DIR handed to drivers
+	BackupsDir     string // SERVO_BACKUP_DIR, retention-pruned
+	BackgroundsDir string // uploaded login/dashboard background images
 	// --- BEGIN UPDATE CHECK ---
 	ReleaseSource release.ReleaseSource
 	// --- END UPDATE CHECK ---
@@ -120,6 +129,16 @@ func (a *App) Init(ctx context.Context, cmd *cli.Command) (context.Context, erro
 	a.TempDir = filepath.Join(a.StorageDir, "tmp")
 	if err := os.MkdirAll(a.TempDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create temp dir: %w", err)
+	}
+	// game server dirs
+	a.DriversDir = filepath.Join(a.StorageDir, "drivers")
+	a.DriverDataDir = filepath.Join(a.StorageDir, "driver-data")
+	a.BackupsDir = filepath.Join(a.StorageDir, "backups")
+	a.BackgroundsDir = filepath.Join(a.StorageDir, "backgrounds")
+	for _, dir := range []string{a.DriversDir, a.DriverDataDir, a.BackupsDir, a.BackgroundsDir} {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return nil, fmt.Errorf("failed to create %s: %w", dir, err)
+		}
 	}
 	// control-plane secrets (dashboard TLS cert) live outside the config blob
 	// in their own protected directory.
@@ -210,6 +229,16 @@ func (a *App) Init(ctx context.Context, cmd *cli.Command) (context.Context, erro
 	if a.UI, err = ui.New(); err != nil {
 		return ctx, fmt.Errorf("failed to load UI: %w", err)
 	}
+
+	// game server op runner + cached status poller
+	a.Ops = ops.New(ctx, a.DB, a.Log, ops.Paths{
+		DriversDir: a.DriversDir,
+		DataDir:    a.DriverDataDir,
+		BackupsDir: a.BackupsDir,
+		AppVersion: a.buildInfo.Version,
+	})
+	a.Poller = ops.NewPoller(a.Ops)
+	a.Sched = ops.NewScheduler(a.Ops)
 
 	// --- BEGIN UPDATE CHECK ---
 	// initialize release source for update checking

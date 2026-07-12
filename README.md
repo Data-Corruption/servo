@@ -1,83 +1,71 @@
-# 🌱 Sprout
+# 🛰️ Servo
 
-**Go CLI/Daemon app template with atomic state, modern UI, built-in updates, and release plumbing.**
+**A dashboard for managing a dedicated game server, sized for small friend groups.**
 
-Sprout handles the *entire lifecycle* of a CLI application: compiling → packaging → publishing → installing → running (as a daemon) → and safely updating itself. Infrastructure that would take months to build from scratch, battle-tested and ready to use.
+One host, one game server, one always-on HTTPS dashboard: start/stop/restart, updates, scheduled
+nightly restarts, backups with one-click restore, player counts, and in-game restart warnings.
+Built on [Sprout](https://github.com/Data-Corruption/sprout), so install, self-update, TLS,
+auth, and the daemon lifecycle are already battle-tested plumbing.
 
-## Why Sprout?
+## How it works
 
-Built with **love** and unhealthy amounts of caffeine. Sprout is a low-compromise solution for CLI/Daemon applications. Check this shit out:
-
-- **How does the binary update without corrupting state?**: PID-tracked migration guards with cross-process file locking ensure safe, atomic updates even with multiple instances running.
-- **How do multiple CLI instances + daemon share state?**: LMDB provides ACID-compliant, multi-process concurrent access that doubles as language-agnostic IPC.
-- **How is releasing automated?**: Changelog-driven CI/CD. Push a version entry, and Github Actions builds fully static binaries, signs everything with cosign keyless signing, and uploads. The installer verifies the whole chain.
-- **How does a systemd service update itself?**: Detached child process cosign-verifies the update script, then runs it: stops the service, downloads and verifies the new binary, and restarts it. Don't want self-update? The code is fenced into delete-to-disable blocks.
-- **How is the dashboard secured?**: Always-on HTTPS (auto-generated self-signed cert, or plug in a reverse proxy), password login with Argon2id hashing, permission bitmask, rate limiting, and same-origin CSRF protection. `yourapp password add` and go.
-- **How do you style the frontend?**: TailwindCSS + DaisyUI, all standalone (no npm needed) with compile-time cache busting... You'll be the belle of the ball.
-
-## Workflow
-
-| Edit Project | Create Release | Publish | Install | Update |
-| :---: | :---: | :---: | :---: | :---: |
-| ![Edit](docs/assets/step-edit.gif) | ![Push](docs/assets/step-push.gif) | ![Publish](docs/assets/step-publish.gif) | ![Install](docs/assets/step-install.gif) | ![Update](docs/assets/step-update.gif) |
-| Develop your app | Add a changelog entry | CI builds & uploads | One-liner install | Click-to-update in browser |
-
-## Get Started
-
-1. **[Use this Template](docs/DEVELOPMENT.md)** - Fork, configure, and build your own app
-2. **[Installation Guide](docs/INSTALLATION.md)** - Template for end-user install docs
-
-## Platform Support
-
-Sprout is Linux-first. It targets `amd64` and `arm64`, and its daemon model depends on `systemd --user`.
-
-| Platform | Status | Notes |
-| :--- | :--- | :--- |
-| **Linux** | Production | Primary target. Full CLI, daemon, install, and update flow. |
-| **Windows** | Experimental | Includes a PowerShell installer that bootstraps WSL, installs Sprout inside it, and creates a Windows CLI shim. Service management still depends on WSL + `systemd --user`. |
-| **macOS/BSD** | Unsupported | Lacks the `systemd` model Sprout is built around. |
-
-## Architecture
-
-Sprout uses **unified dependency injection**: the `App` struct holds all services (DB, Logger, Config, Server) and manages resource cleanup via a stack. For the full deep-dive, see [ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Servo itself knows nothing about any particular game. All game-specific logic lives in a
+**driver**: a single shell script implementing a small verb contract (`start`, `stop`, `status`,
+`backup`, ...). Servo orchestrates; the driver executes.
 
 ```mermaid
-graph TD
-    subgraph "User Space"
-        CLI[CLI Instances]
-        WebUI[Web UI / Browser]
-    end
-
-    subgraph "System Space"
-        Daemon[Daemon Service]
-    end
-
-    LMDB[(LMDB Database)]
-
-    CLI -->|Read/Write| LMDB
-    Daemon -->|Read/Write| LMDB
-    CLI -.->|Control| Daemon
-    WebUI <-->|HTTP| Daemon
+graph LR
+    Browser[Web UI] <-->|HTTPS + polling| Daemon[servo daemon]
+    Daemon -->|"verbs (start, stop, backup, ...)"| Driver[driver script]
+    Driver -->|podman / steamcmd / whatever| Game[game server]
 ```
 
-### Philosophy
+- **Drivers are installed over SSH** (`~/.servo/drivers/`), never through the UI — a driver is
+  arbitrary code, so getting one onto the box requires shell access. Activation (with validation)
+  happens in the dashboard, admin only. See [docs/DRIVERS.md](docs/DRIVERS.md) to write one;
+  [`drivers/fedora-palworld.sh`](drivers/fedora-palworld.sh) ships as the reference driver
+  (Palworld via rootless podman).
+- **One operation at a time.** Long ops (install, update, backup, restore) run async; the
+  dashboard's activity panel shows what's happening, and admins see the live driver output.
+- **Daily restart window** (optional): warns players in-game N minutes ahead (if the driver
+  supports `notify`), takes a backup first (if enabled), and never starts a server someone
+  stopped on purpose.
+- **Backups** are single compressed archives produced by the driver, retention-pruned, and
+  downloadable/restorable from the dashboard. Restore ships in v1 because a backup you've never
+  restored is a hope, not a backup.
+- **Permissions** are a bitmask split into `game.*` (control / backup / restore) and `servo.*`
+  (settings / daemon control), plus `admin` for driver activation and background image uploads.
+  Credentials are created via `servo password add --label alice --perms "game.control game.backup"`.
 
-*   **Complexity is the enemy.** If it's hard to understand, it will break, be hard to maintain, hard to debug, hard to update, etc.
-*   **Dependencies should earn their keep.** Every external package is a liability. I try to only use them when they solve a non-trivial problem.
-*   **Tackle the hard parts first.** Can't say this repo doesn't do that lmao.
-*   **Write for humans.** Code is read more than it's written. In 6 months, you'll be the uninformed reader of your own code. Be kind to future you.
-*   **Discipline.** Stop chasing hyperscale fantasies. Most software should remain small enough for individuals to understand, own, and repair.
+## Getting started
 
-This repo delivers a full CLI/Daemon lifecycle with **only a handful** of direct dependencies (plus a few official `golang.org/x/` packages). The ones that usually require npm (tailwindcss, daisyui) are automatically installed via their standalone methods by the build script, **no npm required**. All your users need is Linux or Windows, and a 64 bit machine.
+1. Install Servo on the host (see [docs/INSTALLATION.md](docs/INSTALLATION.md)).
+2. Create a login: `servo password add --label admin`.
+3. Drop a driver in over SSH and make it executable:
+   ```sh
+   scp drivers/fedora-palworld.sh host:~/.servo/drivers/
+   ssh host chmod +x '~/.servo/drivers/fedora-palworld.sh'
+   ```
+   (For the Palworld driver: edit the config block — passwords! — before copying.)
+4. Open the dashboard (`https://host:8484`), go to settings, activate the driver, press
+   **Install**, then **Start**.
+5. Optional: set the nightly restart time, enable backups, upload a background image, and hand
+   out scoped credentials to the group.
+
+## Design & internals
+
+- [docs/DESIGN.md](docs/DESIGN.md) — the design doc: driver contract, job model, scheduler,
+  security model.
+- [docs/DRIVERS.md](docs/DRIVERS.md) — driver authoring guide.
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — the underlying Sprout template architecture
+  (DB, auth, self-update, release pipeline).
+- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — building and releasing.
+
+## Platform support
+
+Linux (`amd64`/`arm64`) with `systemd --user`, same as Sprout. The reference driver targets
+Fedora + rootless podman, but drivers can wrap anything the host can run.
 
 <br>
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE.md)
-
-<sub>
-🩵 xoxo :3 <- that last bit is a cat, his name is sebastian and he is ultra fancy. Like, i'm not kidding, more than you initially imagined while reading that. Pinky up, drinks tea... you have no idea. Crazy.
-</sub>
-
-<!--
-WHOA! secrets, secret messages, hidden level! https://youtu.be/zwZISypgA9M
--->

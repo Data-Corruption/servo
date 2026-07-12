@@ -8,12 +8,12 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"sprout/internal/app"
-	"sprout/internal/build"
-	"sprout/internal/platform/database/config"
-	"sprout/internal/platform/http/cookies"
-	"sprout/internal/types"
-	"sprout/pkg/crypto"
+	"servo/internal/app"
+	"servo/internal/build"
+	"servo/internal/platform/database/config"
+	"servo/internal/platform/http/cookies"
+	"servo/internal/types"
+	"servo/pkg/crypto"
 	"strings"
 	"sync"
 	"time"
@@ -133,6 +133,24 @@ func TestAuth() func(http.Handler) http.Handler {
 	}
 }
 
+// denyUnauthenticated ends an unauthenticated request. Page navigations get
+// the usual login redirect. Fetch/API requests get 401 JSON instead: fetch
+// follows a 303 transparently and hands the JS a 200 login page, which reads
+// as success (e.g. after a daemon restart drops in-memory sessions, op
+// buttons would banner "working" while doing nothing).
+func denyUnauthenticated(w http.ResponseWriter, r *http.Request) {
+	isFetch := r.Method != http.MethodGet ||
+		strings.HasPrefix(r.URL.Path, "/api/") ||
+		strings.Contains(r.Header.Get("Accept"), "application/json")
+	if isFetch {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":"session expired"}`))
+		return
+	}
+	http.Redirect(w, r, "/login", http.StatusSeeOther)
+}
+
 // Auth returns the session-auth middleware. At construction it restores a
 // session persisted across restart (see the settings restart handler), so the
 // browser that triggered a restart stays logged in.
@@ -155,14 +173,15 @@ func Auth(a *app.App) func(http.Handler) http.Handler {
 				return
 			}
 
-			if r.URL.Path == "/login" || strings.HasPrefix(r.URL.Path, "/assets/") {
+			// /bg/login is exempt because the login page renders it pre-auth.
+			if r.URL.Path == "/login" || r.URL.Path == "/bg/login" || strings.HasPrefix(r.URL.Path, "/assets/") {
 				next.ServeHTTP(w, r)
 				return
 			}
 
 			token := cookies.Read(r, SessionCookieName)
 			if token == "" {
-				http.Redirect(w, r, "/login", http.StatusSeeOther)
+				denyUnauthenticated(w, r)
 				return
 			}
 			hashedToken := crypto.Hash(token)
@@ -171,7 +190,7 @@ func Auth(a *app.App) func(http.Handler) http.Handler {
 			s, ok := sessions[hashedToken]
 			mu.RUnlock()
 			if !ok || s.Expiry.Before(time.Now()) {
-				http.Redirect(w, r, "/login", http.StatusSeeOther)
+				denyUnauthenticated(w, r)
 				return
 			}
 

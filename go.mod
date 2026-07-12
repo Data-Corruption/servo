@@ -1,4 +1,4 @@
-module sprout
+module servo
 
 go 1.25.0
 

@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sprout/internal/build"
-	"sprout/internal/platform/database"
-	"sprout/internal/platform/database/config"
+	"servo/internal/build"
+	"servo/internal/platform/database"
+	"servo/internal/platform/database/config"
 	"testing"
 
 	"github.com/Data-Corruption/stdx/xlog"

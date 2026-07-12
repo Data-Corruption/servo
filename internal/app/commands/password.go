@@ -3,10 +3,10 @@ package commands
 import (
 	"context"
 	"fmt"
-	"sprout/internal/app"
-	"sprout/internal/platform/database/config"
-	"sprout/internal/types"
-	"sprout/pkg/crypto"
+	"servo/internal/app"
+	"servo/internal/platform/database/config"
+	"servo/internal/types"
+	"servo/pkg/crypto"
 	"strings"
 
 	"github.com/urfave/cli/v3"

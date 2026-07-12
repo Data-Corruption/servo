@@ -40,9 +40,9 @@ umask 022
 
 # Config --------------------------------------------------------------
 
-APP_NAME="sprout"
+APP_NAME="servo"
 RELEASE_URL="https://cd.example.com/"
-CONTACT_URL="https://github.com/DataCorruption/Sprout"
+CONTACT_URL="https://github.com/Data-Corruption/servo"
 
 # cosign keyless identity: only releases signed by this exact workflow on main
 # verify. Derived in CI (the only mode that renders the install scripts) and
@@ -52,7 +52,7 @@ CERT_IDENTITY=""
 DEFAULT_LOG_LEVEL="warn"
 
 SERVICE="true"
-SERVICE_DESC="Sprout daemon"
+SERVICE_DESC="Servo game server dashboard daemon"
 SERVICE_ARGS="service run"
 SERVICE_DEFAULT_PORT="8484"
 
@@ -340,7 +340,7 @@ tests() {
 # make_ldflags <testMode>
 # Prints the -ldflags string for a build with the given testMode value.
 make_ldflags() {
-  local pkg="sprout/internal/build"
+  local pkg="servo/internal/build"
   local ldflags="-X '${pkg}.name=$APP_NAME'"
   ldflags+=" -X '${pkg}.version=$VERSION'"
   ldflags+=" -X '${pkg}.contactURL=$CONTACT_URL'"

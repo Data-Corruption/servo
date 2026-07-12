@@ -21,14 +21,25 @@ async function getErrorMessage(res) {
     return `HTTP ${res.status}`;
 }
 
+/** Session expired (e.g. daemon restarted): go log in again */
+function handleUnauthorized(res) {
+    if (res.status === 401) {
+        window.location.href = '/login';
+        throw new Error('session expired, redirecting to login');
+    }
+}
+
 export async function requestJSON(endpoint, { method = 'GET', body, signal } = {}) {
+    const headers = { 'Accept': 'application/json' };
+    if (body !== undefined) headers['Content-Type'] = 'application/json';
     const res = await fetch(endpoint, {
         method,
-        headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+        headers,
         body: body !== undefined ? JSON.stringify(body) : undefined,
         signal,
     });
     if (!res.ok) {
+        handleUnauthorized(res);
         throw new Error(await getErrorMessage(res));
     }
     return parseResponse(res);

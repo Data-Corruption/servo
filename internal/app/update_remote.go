@@ -31,8 +31,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sprout/internal/platform/database/config"
-	"sprout/internal/types"
+	"servo/internal/platform/database/config"
+	"servo/internal/types"
 	"syscall"
 	"time"
 

@@ -6,7 +6,7 @@
 package commands
 
 import (
-	"sprout/internal/app"
+	"servo/internal/app"
 
 	"github.com/urfave/cli/v3"
 )

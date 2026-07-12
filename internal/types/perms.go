@@ -5,14 +5,26 @@ import (
 	"strings"
 )
 
-// Perm is a permission bitmask attached to credentials and sessions. This is
-// a small starter set — add app-specific bits above PermAdmin as needed (the
-// pattern scales to 64 bits).
+// Perm is a permission bitmask attached to credentials and sessions. Bits are
+// split into two namespaces: `game.*` protects the game server (driver
+// operations), `servo.*` protects the dashboard/daemon itself. Bits group by
+// risk tier rather than one bit per verb (the pattern scales to 64 bits).
 type Perm uint64
 
 const (
-	PermSettings      Perm = 1 << iota // settings
-	PermServerControl                  // server.control
+	// PermGameControl covers routine game server operations: start, stop,
+	// restart, update, notify.
+	PermGameControl Perm = 1 << iota // game.control
+	// PermGameBackup covers backup-now and downloading archives.
+	PermGameBackup // game.backup
+	// PermGameRestore covers restoring a backup — the one destructive action,
+	// so it's its own bit, granted per credential as trust allows.
+	PermGameRestore // game.restore
+	// PermServoSettings covers the settings page: restart schedule, notify
+	// lead time, backup toggle/retention, binds, log level.
+	PermServoSettings // servo.settings
+	// PermServoControl covers the daemon itself: stop, restart, self-update.
+	PermServoControl // servo.control
 
 	PermAdmin Perm = ^Perm(0)
 )
@@ -21,8 +33,11 @@ var permNames = [...]struct {
 	name string
 	perm Perm
 }{
-	{"settings", PermSettings},
-	{"server.control", PermServerControl},
+	{"game.control", PermGameControl},
+	{"game.backup", PermGameBackup},
+	{"game.restore", PermGameRestore},
+	{"servo.settings", PermServoSettings},
+	{"servo.control", PermServoControl},
 }
 
 var PermNames map[string]Perm
@@ -56,8 +71,8 @@ func (p Perm) String() string {
 }
 
 // ParsePerms parses a space-separated permission spec. Tokens are OR'd in;
-// a leading '!' clears the bit instead. Example: "admin !server.control"
-// yields all permissions except PermServerControl.
+// a leading '!' clears the bit instead. Example: "admin !game.restore"
+// yields all permissions except PermGameRestore.
 func ParsePerms(args []string) (Perm, error) {
 	var p Perm
 	for _, tok := range args {

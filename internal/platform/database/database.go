@@ -19,7 +19,9 @@ Notes on adding new DBIs:
 */
 var (
 	ConfigDBI = register("config")
-	// MyNewDBI = register("mynew") // example
+	// StateDBI holds runtime records that churn independently of config
+	// (e.g. the last driver operation result).
+	StateDBI = register("state")
 )
 
 /* KV Layout:

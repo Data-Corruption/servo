@@ -3,11 +3,11 @@ package commands
 import (
 	"context"
 	"fmt"
-	"sprout/internal/app"
-	"sprout/internal/platform/database/config"
-	"sprout/internal/platform/http/router"
-	"sprout/internal/platform/http/server"
-	"sprout/internal/types"
+	"servo/internal/app"
+	"servo/internal/platform/database/config"
+	"servo/internal/platform/http/router"
+	"servo/internal/platform/http/server"
+	"servo/internal/types"
 	"time"
 
 	"github.com/Data-Corruption/stdx/xnet"
@@ -122,6 +122,9 @@ var Service = register(func(a *app.App) *cli.Command {
 					if err := server.New(a, cfg, mux); err != nil {
 						return fmt.Errorf("failed to create server: %w", err)
 					}
+
+					// daily restart/backup window (daemon only, dies with ctx)
+					go a.Sched.Run(ctx)
 
 					// loopback HTTP proxy listener (optional), shut down on exit
 					if a.ProxyServer != nil {

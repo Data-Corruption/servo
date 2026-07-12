@@ -3,11 +3,21 @@
 /* downloaded build tools live in tools/ at the repo root */
 @source not "../../../../tools";
 
+/* all built-in themes are bundled so the forced-theme setting can offer any
+   of them; light stays --default and dark --prefersdark for the toggle */
 @plugin "../../../../tools/daisyui.mjs" {
-    themes: nord --default, forest --prefersdark;
+    themes: all;
 }
 
 /* Optional for custom themes – Docs: https://daisyui.com/docs/themes/#how-to-add-a-new-custom-theme */
 @plugin "../../../../tools/daisyui-theme.mjs" {
     /* custom theme here */
+}
+
+/* daisyui's .label is nowrap inline-flex, which makes long hint paragraphs
+   widen their fieldset (and the w-full inputs inside it) past the card edge.
+   Hint paragraphs should just wrap. */
+p.label {
+    white-space: normal;
+    display: block;
 }

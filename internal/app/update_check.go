@@ -27,8 +27,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"sprout/internal/platform/database/config"
-	"sprout/internal/types"
+	"servo/internal/platform/database/config"
+	"servo/internal/types"
 	"sync"
 	"time"
 

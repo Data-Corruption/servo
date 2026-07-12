@@ -1,0 +1,137 @@
+{{template "page_start" .}}
+    {{ if .HasBackground }}
+    <!-- Blurred background layer. No negative z-index: that would paint
+         behind the body's bg-base-100 fill. Instead this fixed layer paints
+         over the body background, and the (relative) content paints over it. -->
+    <div aria-hidden="true" class="fixed inset-0 bg-cover bg-center pointer-events-none"
+        style="background-image: url('/bg/dashboard');{{ if .BackgroundBlur }} filter: blur({{ .BackgroundBlur }}px); transform: scale(1.06);{{ end }}"></div>
+    {{ end }}
+
+    <!-- settings cog, fixed top right -->
+    <a href="/settings" class="btn btn-circle btn-ghost fixed top-3 right-3 z-20 bg-base-200/60 backdrop-blur-sm"
+        aria-label="Settings">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+    </a>
+
+    <div id="dashboard-root" class="relative min-h-screen p-4 sm:p-8 flex justify-center
+        {{ if eq .ContentAlign "left" }}lg:justify-start{{ else if eq .ContentAlign "right" }}lg:justify-end{{ end }}">
+        <div class="w-full max-w-2xl space-y-4">
+
+            <!-- Transient banner -->
+            <div id="dashboard-banner" role="alert" class="alert hidden">
+                <span id="dashboard-banner-message"></span>
+            </div>
+
+            {{ if not .HasDriver }}
+            <div role="alert" class="alert alert-info">
+                <span>No driver activated yet. Drop one into <code class="font-mono">~/.servo/drivers/</code> over SSH,
+                    then activate it in <a href="/settings" class="link">settings</a>.</span>
+            </div>
+            {{ end }}
+
+            <!-- Status Card -->
+            <div class="card bg-base-200 shadow-sm">
+                <div class="card-body gap-3">
+                    <div class="flex items-center justify-between">
+                        <h2 class="card-title text-base">Game Server</h2>
+                        <span id="driver-name" class="text-xs text-base-content/50"></span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span id="status-dot" aria-hidden="true" class="status status-lg"></span>
+                        <span id="status-text" class="font-medium">checking…</span>
+                        <span id="player-count" class="badge badge-ghost hidden"></span>
+                        <span id="stale-badge" class="badge badge-warning badge-sm hidden"
+                            title="The active driver was written for a different server/container version. Informational only.">driver behind</span>
+                    </div>
+                    <div id="players-list" class="text-sm text-base-content/60 hidden"></div>
+                    <div id="version-row" class="text-xs text-base-content/50"></div>
+
+                    {{ if .CanControl }}
+                    <div class="flex flex-wrap items-center gap-2 pt-2">
+                        <div class="join">
+                            <button id="op-start" data-op="start" class="join-item btn btn-success btn-sm op-btn">Start</button>
+                            <button id="op-restart" data-op="restart" class="join-item btn btn-primary btn-sm op-btn">Restart</button>
+                            <button id="op-stop" data-op="stop" class="join-item btn btn-error btn-sm op-btn">Stop</button>
+                        </div>
+                        <div class="grow"></div>
+                        <button id="op-update" data-op="update" class="btn btn-ghost btn-sm op-btn">Update</button>
+                        {{ if .CanBackup }}
+                        <button id="op-backup" data-op="backup" class="btn btn-ghost btn-sm op-btn">Backup Now</button>
+                        {{ end }}
+                        {{ if .IsAdmin }}
+                        <button id="op-install" data-op="install" class="btn btn-ghost btn-sm op-btn opacity-60">Install</button>
+                        {{ end }}
+                    </div>
+                    {{ end }}
+                </div>
+            </div>
+
+            {{ if or .GameAddress .GamePassword }}
+            <!-- Connection Card -->
+            <div class="card bg-base-200 shadow-sm">
+                <div class="card-body gap-3">
+                    <h2 class="card-title text-base">Join</h2>
+                    <div class="flex flex-wrap gap-2">
+                        {{ if .GameAddress }}
+                        <button class="btn btn-sm btn-outline gap-2 copy-btn max-w-full" data-copy="{{ .GameAddress }}">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                            <span class="font-mono truncate">{{ .GameAddress }}</span>
+                        </button>
+                        {{ end }}
+                        {{ if .GamePassword }}
+                        <button class="btn btn-sm btn-outline gap-2 copy-btn" data-copy="{{ .GamePassword }}">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                            </svg>
+                            <span>Password</span>
+                        </button>
+                        {{ end }}
+                    </div>
+                    <p class="text-xs text-base-content/50">Click to copy.</p>
+                </div>
+            </div>
+            {{ end }}
+
+            <!-- Activity Panel -->
+            <div class="card bg-base-200 shadow-sm">
+                <div class="card-body gap-3">
+                    <h2 class="card-title text-base">Activity</h2>
+                    <div id="activity-idle" class="text-sm text-base-content/60">Idle.</div>
+                    <div id="activity-running" class="hidden items-center gap-3 flex">
+                        <span class="loading loading-infinity loading-md text-primary"></span>
+                        <span id="activity-op" class="font-medium"></span>
+                        <span id="activity-elapsed" class="text-sm text-base-content/50"></span>
+                    </div>
+                    <div id="activity-last" class="text-xs text-base-content/50 hidden"></div>
+                    {{ if .IsAdmin }}
+                    <pre id="op-log" class="hidden bg-base-300 rounded-lg p-3 text-xs overflow-x-auto max-h-64 overflow-y-auto whitespace-pre-wrap"></pre>
+                    {{ end }}
+                </div>
+            </div>
+
+            <!-- Backups Card -->
+            {{ if .CanBackup }}
+            <div class="card bg-base-200 shadow-sm">
+                <div class="card-body gap-3">
+                    <h2 class="card-title text-base">Backups</h2>
+                    <div id="backups-empty" class="text-sm text-base-content/60">No backups yet.</div>
+                    <ul id="backups-list" class="space-y-2 hidden"></ul>
+                </div>
+            </div>
+            {{ end }}
+        </div>
+    </div>
+
+    <!-- flags for dashboard.js -->
+    <div id="dashboard-flags" class="hidden"
+        data-can-restore="{{ if .CanRestore }}1{{ end }}"
+        data-is-admin="{{ if .IsAdmin }}1{{ end }}"></div>
+{{template "page_end" .}}

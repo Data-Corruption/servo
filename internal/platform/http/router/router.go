@@ -3,9 +3,11 @@ package router
 import (
 	"net/http"
 	"net/url"
-	"sprout/internal/app"
-	"sprout/internal/platform/http/middleware"
-	"sprout/internal/platform/http/router/settings"
+	"servo/internal/app"
+	"servo/internal/platform/http/middleware"
+	"servo/internal/platform/http/router/api"
+	"servo/internal/platform/http/router/dashboard"
+	"servo/internal/platform/http/router/settings"
 	"strings"
 
 	"github.com/Data-Corruption/stdx/xlog"
@@ -42,7 +44,9 @@ func New(a *app.App) *chi.Mux {
 
 	// register routes
 	RegisterLoginRoutes(a, r)
+	dashboard.Register(a, r)
 	settings.Register(a, r)
+	api.Register(a, r)
 
 	return r
 }
@@ -66,9 +70,12 @@ func csrfGuard(next http.Handler) http.Handler {
 			http.Error(w, "cross-origin request rejected", http.StatusForbidden)
 			return
 		}
-		// JSON endpoints must receive JSON; /login is the only form-encoded POST
+		// JSON endpoints must receive JSON; /login is the only form-encoded
+		// POST and background image uploads are multipart. The Origin check
+		// above is the actual CSRF gate — this is defense in depth.
 		if r.URL.Path != "/login" && r.ContentLength != 0 {
-			if ct := r.Header.Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
+			ct := r.Header.Get("Content-Type")
+			if !strings.HasPrefix(ct, "application/json") && !strings.HasPrefix(ct, "multipart/form-data") {
 				http.Error(w, "expected application/json", http.StatusUnsupportedMediaType)
 				return
 			}

@@ -3,8 +3,8 @@ package database
 import (
 	"fmt"
 	"path/filepath"
-	"sprout/internal/build"
-	"sprout/internal/types"
+	"servo/internal/build"
+	"servo/internal/types"
 	"testing"
 
 	"github.com/Data-Corruption/lmdb-go/lmdb"

@@ -6,8 +6,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sprout/internal/app"
-	"sprout/pkg/x"
+	"servo/internal/app"
+	"servo/pkg/x"
 	"time"
 
 	"github.com/Data-Corruption/stdx/xterm/prompt"

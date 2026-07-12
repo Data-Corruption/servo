@@ -3,8 +3,8 @@ package database
 import (
 	"errors"
 	"fmt"
-	"sprout/internal/types"
-	"sprout/pkg/migrator"
+	"servo/internal/types"
+	"servo/pkg/migrator"
 
 	"github.com/Data-Corruption/lmdb-go/lmdb"
 	"github.com/Data-Corruption/lmdb-go/wrap"

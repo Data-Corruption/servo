@@ -50,8 +50,8 @@
         <div class="w-full max-w-md space-y-4">
 
             <!-- Header -->
-            <div class="text-center">
-                <span class="text-2xl">🌱</span>
+            <div class="flex items-center">
+                <a href="/" class="btn btn-ghost btn-sm">&larr; Dashboard</a>
             </div>
 
             <!-- --- BEGIN UPDATE CHECK --- -->
@@ -78,10 +78,10 @@
                 <span>Changes require a restart to take effect</span>
             </div>
 
-            <!-- Server Controls Card -->
+            <!-- Daemon Controls Card (Servo itself, not the game server) -->
             <div class="card bg-base-200 shadow-sm">
                 <div class="card-body gap-4">
-                    <h2 class="card-title text-base">Server Controls</h2>
+                    <h2 class="card-title text-base">Servo Daemon</h2>
                     <div class="flex gap-3">
                         <button id="settings-stop-btn" class="btn btn-error btn-outline flex-1">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
@@ -109,10 +109,52 @@
             <div class="card bg-base-200 shadow-sm">
                 <div class="card-body gap-4">
                     <h2 class="card-title text-base">Appearance</h2>
+                    {{ if not .ForcedTheme }}
                     <label class="label cursor-pointer justify-between px-0">
                         <span>Dark Mode</span>
                         <input type="checkbox" id="theme-toggle" class="toggle toggle-primary" />
                     </label>
+                    {{ end }}
+                    <fieldset class="fieldset">
+                        <legend class="fieldset-legend">Theme</legend>
+                        <div class="flex gap-2 items-center">
+                            <select id="settings-forced-theme" class="select select-bordered w-full min-w-0"
+                                aria-label="Theme">
+                                <option value="" {{ if not .ForcedTheme }}selected{{ end }}>Default (light/dark toggle)</option>
+                                {{ $forced := .ForcedTheme }}
+                                {{ range .Themes }}
+                                <option value="{{ . }}" {{ if eq . $forced }}selected{{ end }}>{{ . }}</option>
+                                {{ end }}
+                            </select>
+                            <span class="status hidden" role="status" aria-live="polite"></span>
+                        </div>
+                        <p class="label text-xs">Force a theme for everyone (hides the dark mode toggle). Reloads the
+                            page</p>
+                    </fieldset>
+                </div>
+            </div>
+
+            <!-- Connection Info Card -->
+            <div class="card bg-base-200 shadow-sm">
+                <div class="card-body gap-4">
+                    <h2 class="card-title text-base">Connection Info</h2>
+                    <fieldset class="fieldset">
+                        <legend class="fieldset-legend">Server Address / Name</legend>
+                        <div class="flex gap-2 items-center">
+                            <input type="text" id="settings-game-address" class="input input-bordered w-full min-w-0"
+                                value="{{ .GameAddress }}" placeholder="play.example.com:8211" />
+                            <span class="status hidden" role="status" aria-live="polite"></span>
+                        </div>
+                    </fieldset>
+                    <fieldset class="fieldset">
+                        <legend class="fieldset-legend">Server Password</legend>
+                        <div class="flex gap-2 items-center">
+                            <input type="text" id="settings-game-password" class="input input-bordered w-full min-w-0"
+                                value="{{ .GamePassword }}" placeholder="empty = none" />
+                            <span class="status hidden" role="status" aria-live="polite"></span>
+                        </div>
+                        <p class="label text-xs">Shown on the dashboard as copy buttons so the group can join</p>
+                    </fieldset>
                 </div>
             </div>
 
@@ -125,7 +167,7 @@
                     <fieldset class="fieldset">
                         <legend class="fieldset-legend">Log Level</legend>
                         <div class="flex gap-2 items-center">
-                            <select id="settings-log-level" class="select select-bordered w-full"
+                            <select id="settings-log-level" class="select select-bordered w-full min-w-0"
                                 aria-label="Log Level">
                                 <option value="debug" {{ if eq .LogLevel "debug" }}selected{{ end }}>Debug</option>
                                 <option value="info" {{ if eq .LogLevel "info" }}selected{{ end }}>Info</option>
@@ -141,7 +183,7 @@
                     <fieldset class="fieldset">
                         <legend class="fieldset-legend">Dashboard Bind (HTTPS)</legend>
                         <div class="flex gap-2 items-center">
-                            <input type="text" id="settings-ui-bind" class="input input-bordered w-full"
+                            <input type="text" id="settings-ui-bind" class="input input-bordered w-full min-w-0"
                                 value="{{ .UIBind }}" placeholder=":8484" />
                             <span class="status hidden" role="status" aria-live="polite"></span>
                         </div>
@@ -155,7 +197,7 @@
                     <fieldset class="fieldset">
                         <legend class="fieldset-legend">Proxy Bind (HTTP, loopback only)</legend>
                         <div class="flex gap-2 items-center">
-                            <input type="text" id="settings-proxy-bind" class="input input-bordered w-full"
+                            <input type="text" id="settings-proxy-bind" class="input input-bordered w-full min-w-0"
                                 value="{{ .ProxyBind }}" placeholder="127.0.0.1:8485" />
                             <span class="status hidden" role="status" aria-live="polite"></span>
                         </div>
@@ -164,6 +206,161 @@
                     </fieldset>
                 </div>
             </div>
+
+            <!-- Restart Schedule Card -->
+            <div class="card bg-base-200 shadow-sm">
+                <div class="card-body gap-4">
+                    <h2 class="card-title text-base">Restart Schedule</h2>
+
+                    <label class="label cursor-pointer justify-between px-0">
+                        <div>
+                            <span>Daily Restart</span>
+                            <p class="text-sm text-base-content/50">Restart the game server every day at the set time</p>
+                        </div>
+                        <div class="flex gap-2 items-center">
+                            <input type="checkbox" id="settings-restart-enabled" class="toggle toggle-primary"
+                                {{ if .RestartEnabled }}checked{{ end }} />
+                            <span class="status hidden" role="status" aria-live="polite"></span>
+                        </div>
+                    </label>
+
+                    <fieldset class="fieldset">
+                        <legend class="fieldset-legend">Restart Time</legend>
+                        <div class="flex gap-2 items-center">
+                            <input type="text" id="settings-restart-time" class="input input-bordered w-full min-w-0"
+                                value="{{ .RestartTime }}" placeholder="04:00" />
+                            <span class="status hidden" role="status" aria-live="polite"></span>
+                        </div>
+                        <p class="label text-xs">24h clock, host-local time</p>
+                    </fieldset>
+
+                    <fieldset class="fieldset">
+                        <legend class="fieldset-legend">Player Warning Lead (minutes)</legend>
+                        <div class="flex gap-2 items-center">
+                            <input type="number" id="settings-notify-lead" class="input input-bordered w-full min-w-0" min="0"
+                                max="720" value="{{ .NotifyLeadMinutes }}" />
+                            <span class="status hidden" role="status" aria-live="polite"></span>
+                        </div>
+                        <p class="label text-xs">In-game warning before the restart window (0 = no warning; requires
+                            driver notify support)</p>
+                    </fieldset>
+
+                    <label class="label cursor-pointer justify-between px-0">
+                        <div>
+                            <span>Backups</span>
+                            <p class="text-sm text-base-content/50">Take a backup during the restart window</p>
+                        </div>
+                        <div class="flex gap-2 items-center">
+                            <input type="checkbox" id="settings-backups-enabled" class="toggle toggle-primary"
+                                {{ if .BackupsEnabled }}checked{{ end }} />
+                            <span class="status hidden" role="status" aria-live="polite"></span>
+                        </div>
+                    </label>
+
+                    <fieldset class="fieldset">
+                        <legend class="fieldset-legend">Backup Retention</legend>
+                        <div class="flex gap-2 items-center">
+                            <input type="number" id="settings-backup-retention" class="input input-bordered w-full min-w-0"
+                                min="0" value="{{ .BackupRetention }}" />
+                            <span class="status hidden" role="status" aria-live="polite"></span>
+                        </div>
+                        <p class="label text-xs">Keep the newest N archives (0 = keep everything)</p>
+                    </fieldset>
+                </div>
+            </div>
+
+            {{ if .IsAdmin }}
+            <!-- Driver Card (admin) -->
+            <div class="card bg-base-200 shadow-sm">
+                <div class="card-body gap-4">
+                    <h2 class="card-title text-base">Driver</h2>
+                    <p id="driver-active-label" class="text-sm text-base-content/60">
+                        {{ if .ActiveDriver }}Active: {{ .ActiveDriver }}{{ else }}No driver active{{ end }}
+                    </p>
+                    {{ if .Drivers }}
+                    <fieldset class="fieldset">
+                        <legend class="fieldset-legend">Activate Driver</legend>
+                        <div class="flex gap-2 items-center">
+                            <select id="driver-select" class="select select-bordered w-full min-w-0" aria-label="Driver">
+                                {{ $active := .ActiveDriver }}
+                                {{ range .Drivers }}
+                                <option value="{{ . }}" {{ if eq . $active }}selected{{ end }}>{{ . }}</option>
+                                {{ end }}
+                            </select>
+                            <span class="status hidden" role="status" aria-live="polite"></span>
+                            <button id="driver-activate-btn" class="btn btn-primary">Activate</button>
+                        </div>
+                        <p class="label text-xs">Activation validates the driver (describe + deps) before switching</p>
+                    </fieldset>
+                    {{ else }}
+                    <div role="alert" class="alert alert-info text-sm">
+                        <span>No drivers found. Install one over SSH:<br>
+                            <code class="font-mono">scp my-driver.sh host:~/.servo/drivers/ && ssh host chmod +x
+                                "~/.servo/drivers/my-driver.sh"</code></span>
+                    </div>
+                    {{ end }}
+                </div>
+            </div>
+
+            <!-- Backgrounds Card (admin) -->
+            <div class="card bg-base-200 shadow-sm">
+                <div class="card-body gap-4">
+                    <h2 class="card-title text-base">Background Images</h2>
+
+                    <fieldset class="fieldset">
+                        <legend class="fieldset-legend">Login Page</legend>
+                        <div class="flex gap-2 items-center">
+                            <img id="bg-login-preview" alt="login background"
+                                class="h-12 w-20 object-cover rounded shrink-0 {{ if not .LoginBackground }}hidden{{ end }}"
+                                src="/bg/login" />
+                            <input type="file" id="bg-login-file" class="file-input file-input-bordered w-full min-w-0"
+                                accept="image/avif,image/png,image/jpeg,image/webp,image/gif" />
+                            <span class="status hidden" role="status" aria-live="polite"></span>
+                            <button id="bg-login-clear" class="btn btn-ghost">Clear</button>
+                        </div>
+                    </fieldset>
+
+                    <fieldset class="fieldset">
+                        <legend class="fieldset-legend">Dashboard</legend>
+                        <div class="flex gap-2 items-center">
+                            <img id="bg-dashboard-preview" alt="dashboard background"
+                                class="h-12 w-20 object-cover rounded shrink-0 {{ if not .DashboardBackground }}hidden{{ end }}"
+                                src="/bg/dashboard" />
+                            <input type="file" id="bg-dashboard-file" class="file-input file-input-bordered w-full min-w-0"
+                                accept="image/avif,image/png,image/jpeg,image/webp,image/gif" />
+                            <span class="status hidden" role="status" aria-live="polite"></span>
+                            <button id="bg-dashboard-clear" class="btn btn-ghost">Clear</button>
+                        </div>
+                    </fieldset>
+                    <p class="label text-xs">AVIF/PNG/JPEG/WebP/GIF, 8 MiB max. Refresh the page to see changes.</p>
+
+                    <fieldset class="fieldset">
+                        <legend class="fieldset-legend">Background Blur</legend>
+                        <div class="flex gap-3 items-center">
+                            <input type="range" id="settings-background-blur" class="range range-primary min-w-0"
+                                min="0" max="30" step="1" value="{{ .BackgroundBlur }}" />
+                            <span id="background-blur-value" class="text-sm w-12 text-right shrink-0">{{ .BackgroundBlur }}px</span>
+                            <span class="status hidden" role="status" aria-live="polite"></span>
+                        </div>
+                    </fieldset>
+
+                    <fieldset class="fieldset">
+                        <legend class="fieldset-legend">Content Alignment (wide displays)</legend>
+                        <div class="flex gap-2 items-center">
+                            <select id="settings-content-align" class="select select-bordered w-full min-w-0"
+                                aria-label="Content alignment">
+                                <option value="" {{ if or (not .ContentAlign) (eq .ContentAlign "center") }}selected{{ end }}>Center</option>
+                                <option value="left" {{ if eq .ContentAlign "left" }}selected{{ end }}>Left</option>
+                                <option value="right" {{ if eq .ContentAlign "right" }}selected{{ end }}>Right</option>
+                            </select>
+                            <span class="status hidden" role="status" aria-live="polite"></span>
+                        </div>
+                        <p class="label text-xs">Float the dashboard/login content so it doesn't cover the good part of
+                            the image</p>
+                    </fieldset>
+                </div>
+            </div>
+            {{ end }}
 
             <!-- Footer -->
             <div class="text-center">

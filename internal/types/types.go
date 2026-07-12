@@ -2,7 +2,7 @@ package types
 
 import (
 	"fmt"
-	"sprout/internal/build"
+	"servo/internal/build"
 	"time"
 )
 
@@ -24,6 +24,38 @@ type Configuration struct {
 	// app version when update process was accepted. This is lazily used to determine if the update was successful after restart.
 	PreUpdateVersion string `json:"preUpdateVersion"`
 	// --- END REMOTE UPDATE ---
+
+	// game server / driver
+	// ActiveDriver is the filename of the active driver in the drivers dir.
+	// Empty = none activated.
+	ActiveDriver string `json:"activeDriver"`
+	// RestartTime is the daily restart window as "HH:MM" (host-local time).
+	RestartTime    string `json:"restartTime"`
+	RestartEnabled bool   `json:"restartEnabled"`
+	// BackupsEnabled makes the restart window take a backup (and enables
+	// backup-only runs while the server is offline).
+	BackupsEnabled bool `json:"backupsEnabled"`
+	// BackupRetention is how many archives to keep, newest first.
+	BackupRetention int `json:"backupRetention"`
+	// NotifyLeadMinutes is how many minutes before the restart window players
+	// are warned via the notify verb. 0 = no warning.
+	NotifyLeadMinutes int `json:"notifyLeadMinutes"`
+	// Uploaded background image filenames (within the backgrounds dir).
+	// Empty = default background.
+	LoginBackground     string `json:"loginBackground"`
+	DashboardBackground string `json:"dashboardBackground"`
+	// appearance
+	// ForcedTheme pins a DaisyUI theme for everyone and hides the dark mode
+	// toggle. Empty = per-user light/dark toggle.
+	ForcedTheme string `json:"forcedTheme"`
+	// BackgroundBlur is the background image blur radius in px (0 = sharp).
+	BackgroundBlur int `json:"backgroundBlur"`
+	// ContentAlign floats the content column left/center/right on wide
+	// displays. Empty = center.
+	ContentAlign string `json:"contentAlign"`
+	// game server connection info surfaced on the dashboard (copy buttons)
+	GameAddress  string `json:"gameAddress"`
+	GamePassword string `json:"gamePassword"`
 
 	// auth
 	Credentials []Credential `json:"credentials"`
@@ -51,5 +83,8 @@ func DefaultConfig() Configuration {
 		UpdateNotifications: true,
 		LastUpdateCheck:     time.Time{},
 		// --- END UPDATE CHECK ---
+		RestartTime:       "04:00",
+		BackupRetention:   5,
+		NotifyLeadMinutes: 5,
 	}
 }

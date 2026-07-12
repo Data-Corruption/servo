@@ -3,10 +3,10 @@ package router
 import (
 	"html/template"
 	"net/http"
-	"sprout/internal/app"
-	"sprout/internal/platform/database/config"
-	"sprout/internal/platform/http/cookies"
-	"sprout/internal/platform/http/middleware"
+	"servo/internal/app"
+	"servo/internal/platform/database/config"
+	"servo/internal/platform/http/cookies"
+	"servo/internal/platform/http/middleware"
 
 	"github.com/Data-Corruption/stdx/xhttp"
 	"github.com/go-chi/chi/v5"
@@ -21,15 +21,24 @@ func loginData(a *app.App) map[string]any {
 	data := map[string]any{
 		"CSS":     a.UI.CSS.URLPath,
 		"JS":      a.UI.JS.URLPath,
-		"Favicon": template.URL(`data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text x='50%' y='.9em' font-size='90' text-anchor='middle'>🌱</text></svg>`),
+		"Favicon": template.URL(`data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text x='50%' y='.9em' font-size='90' text-anchor='middle'>🛰️</text></svg>`),
 		"Title":   "Login",
-		"Version": a.BuildInfo().Version,
+		// defaults in case the config read below fails
+		"ForcedTheme":    "",
+		"BackgroundBlur": 0,
+		"ContentAlign":   "",
 	}
-	// First-run hint: with no credentials the form is a dead end, so tell the
-	// user how to create one instead.
-	if cfg, err := config.View(a.DB); err == nil && len(cfg.Credentials) == 0 {
-		data["NoCredentials"] = true
-		data["AppName"] = a.BuildInfo().Name
+	if cfg, err := config.View(a.DB); err == nil {
+		// First-run hint: with no credentials the form is a dead end, so tell
+		// the user how to create one instead.
+		if len(cfg.Credentials) == 0 {
+			data["NoCredentials"] = true
+			data["AppName"] = a.BuildInfo().Name
+		}
+		data["HasBackground"] = cfg.LoginBackground != ""
+		data["ForcedTheme"] = cfg.ForcedTheme
+		data["BackgroundBlur"] = cfg.BackgroundBlur
+		data["ContentAlign"] = cfg.ContentAlign
 	}
 	return data
 }
