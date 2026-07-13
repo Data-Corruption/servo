@@ -193,10 +193,10 @@
                         <legend class="fieldset-legend">Dashboard Bind (HTTPS)</legend>
                         <div class="flex gap-2 items-center">
                             <input type="text" id="settings-ui-bind" class="input input-bordered w-full min-w-0"
-                                value="{{ .UIBind }}" placeholder=":8484" />
+                                value="{{ .UIBind }}" placeholder=":8829" />
                             <span class="status hidden" role="status" aria-live="polite"></span>
                         </div>
-                        <p class="label text-xs">Self-signed HTTPS listener, e.g. ":8484" or "0.0.0.0:8484"</p>
+                        <p class="label text-xs">Self-signed HTTPS listener, e.g. ":8829" or "0.0.0.0:8829"</p>
                         <div id="privileged-port-notice" role="alert" class="alert alert-warning hidden">
                             <span>Ports below 1024 usually require elevated privileges</span>
                         </div>
@@ -207,7 +207,7 @@
                         <legend class="fieldset-legend">Proxy Bind (HTTP, loopback only)</legend>
                         <div class="flex gap-2 items-center">
                             <input type="text" id="settings-proxy-bind" class="input input-bordered w-full min-w-0"
-                                value="{{ .ProxyBind }}" placeholder="127.0.0.1:8485" />
+                                value="{{ .ProxyBind }}" placeholder="127.0.0.1:8830" />
                             <span class="status hidden" role="status" aria-live="polite"></span>
                         </div>
                         <p class="label text-xs">Plain HTTP for a local TLS-terminating reverse proxy (e.g. Caddy). Leave

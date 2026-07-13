@@ -8,10 +8,10 @@ import (
 
 type Configuration struct {
 	LogLevel string `json:"logLevel"`
-	// UIBind is the self-signed HTTPS dashboard listener (e.g. ":8484").
+	// UIBind is the self-signed HTTPS dashboard listener (e.g. ":8829").
 	UIBind string `json:"uiBind"`
 	// ProxyBind is the optional loopback-only plain HTTP listener for local
-	// reverse proxies such as Caddy (e.g. "127.0.0.1:8485"). Empty = disabled.
+	// reverse proxies such as Caddy (default "127.0.0.1:8830"). Empty = disabled.
 	ProxyBind string `json:"proxyBind"`
 
 	// --- BEGIN UPDATE CHECK ---
@@ -77,8 +77,9 @@ type Credential struct {
 
 func DefaultConfig() Configuration {
 	return Configuration{
-		LogLevel: build.Info().DefaultLogLevel,
-		UIBind:   fmt.Sprintf(":%d", build.Info().ServiceDefaultPort),
+		LogLevel:  build.Info().DefaultLogLevel,
+		UIBind:    fmt.Sprintf(":%d", build.Info().ServiceDefaultPort),
+		ProxyBind: "127.0.0.1:8830",
 		// --- BEGIN UPDATE CHECK ---
 		UpdateNotifications: true,
 		LastUpdateCheck:     time.Time{},

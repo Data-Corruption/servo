@@ -9,7 +9,7 @@ package app
 // The release-url file is written by install.sh only for installs from the
 // official release URL. Mirror installs (APP_RELEASE_URL override) don't get
 // one, which disables update checking and remote updates for them by design —
-// see docs/MIRRORING.md. A missing file surfaces as [ErrUpdatesDisabled] and
+// see docs/sprout/MIRRORING.md. A missing file surfaces as [ErrUpdatesDisabled] and
 // callers treat it as a graceful no-op, not an error.
 
 import (

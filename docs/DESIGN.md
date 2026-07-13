@@ -1,6 +1,7 @@
 # Servo — Design Doc
 
-**Status: draft / brainstorm.** Nothing here is final; decisions and icebox at the bottom.
+Living design doc — the reference for how Servo works and why. Settled decisions and the icebox
+are at the bottom.
 
 Servo is a dashboard for managing a dedicated game server for a small friend group. Built on
 [Sprout](https://github.com/Data-Corruption/sprout), so the daemon/CLI lifecycle, LMDB config,

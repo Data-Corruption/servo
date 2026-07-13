@@ -63,6 +63,9 @@ servo password add --label bob --perms "admin !game.restore"   # everything exce
 
 ## Getting started
 
+Servo runs on Linux (`amd64`/`arm64`) with `systemd --user`. The reference driver targets
+Fedora + rootless podman, but drivers can wrap anything the host can run.
+
 1. Install Servo on the host (see [docs/INSTALLATION.md](docs/INSTALLATION.md)).
 2. Create a login: `servo password add --label admin`.
 3. Drop a driver in over SSH and make it executable:
@@ -71,24 +74,20 @@ servo password add --label bob --perms "admin !game.restore"   # everything exce
    ssh host chmod +x '~/.servo/drivers/fedora-palworld.sh'
    ```
    (For the Palworld driver: edit the config block — passwords! — before copying.)
-4. Open the dashboard (`https://host:8484`), go to settings, activate the driver, press
+4. Open the dashboard (`https://host:8829`), go to settings, activate the driver, press
    **Install**, then **Start**.
 5. Optional: set the nightly restart time, enable backups, upload a background image, and hand
    out scoped credentials to the group.
 
-## Design & internals
+## Going deeper
 
-- [docs/DESIGN.md](docs/DESIGN.md) — the design doc: driver contract, job model, scheduler,
-  security model.
-- [docs/DRIVERS.md](docs/DRIVERS.md) — driver authoring guide.
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — the underlying Sprout template architecture
-  (DB, auth, self-update, release pipeline).
-- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — building and releasing.
-
-## Platform support
-
-Linux (`amd64`/`arm64`) with `systemd --user`, same as Sprout. The reference driver targets
-Fedora + rootless podman, but drivers can wrap anything the host can run.
+- **Running a server?** [docs/INSTALLATION.md](docs/INSTALLATION.md) covers install, first
+  login, and reverse-proxy setup.
+- **Writing a driver?** [docs/DRIVERS.md](docs/DRIVERS.md) is the authoring guide;
+  [`drivers/driver.template.sh`](drivers/driver.template.sh) is the starting point.
+- **Tinkering on Servo?** [CONTRIBUTING.md](CONTRIBUTING.md) is the dev quickstart;
+  [docs/DESIGN.md](docs/DESIGN.md) has the design rationale (driver contract, job model,
+  scheduler, security model).
 
 <br>
 

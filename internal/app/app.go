@@ -56,7 +56,7 @@ type App struct {
 	Ops         *ops.Runner    // single-flight game server operation runner
 	Poller      *ops.Poller    // TTL-cached game status for the dashboard
 	Sched       *ops.Scheduler // daily restart/backup window; Run() only in service mode
-	BaseURL     string // e.g., "https://localhost:8484"
+	BaseURL     string // e.g., "https://localhost:8829"
 	UserAgent  string // e.g., "Mozilla/5.0 (compatible; <Name>/1.2.3; +<ContactURL>)"
 	StorageDir string // (e.g., ~/.<Name>)
 	RuntimeDir string // (e.g., XDG_RUNTIME_DIR/<Name>, fallback to /tmp/<Name>-USER)
@@ -324,8 +324,8 @@ func getRuntimePath(appName string) (string, error) {
 	return filepath.Join("/tmp", appName+"-"+username), nil
 }
 
-// BindToBaseURL turns a listen bind like ":8484" or "0.0.0.0:8484" into a
-// human-facing dashboard URL ("https://localhost:8484"). The dashboard always
+// BindToBaseURL turns a listen bind like ":8829" or "0.0.0.0:8829" into a
+// human-facing dashboard URL ("https://localhost:8829"). The dashboard always
 // serves self-signed HTTPS on this bind.
 func BindToBaseURL(bind string) string {
 	port := strconv.Itoa(build.Info().ServiceDefaultPort)

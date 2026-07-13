@@ -137,11 +137,11 @@ Dev (non CI) builds set the app version to `v.X.X.X` which disables update relat
 
 This project uses a changelog-driven release process:
 
-1. Insert an entry to `CHANGELOG.md` under # Changelog, describing your changes. See [CHANGELOG.md](CHANGELOG.md) for example.
+1. Insert an entry to `CHANGELOG.md` under # Changelog, describing your changes. See [CHANGELOG.md](../../CHANGELOG.md) for example.
 2. Push your changes to the `main` branch.
 3. GitHub Actions will automatically build the project and upload it to the release bucket. Users should see the update within a day or so.
 
-To see how the update process works, see the [settings page](../internal/platform/http/router/settings/settings.go).  
+To see how the update process works, see the [settings page](../../internal/platform/http/router/settings/settings.go).  
 To test it:
 - publish a new release
 - run `YOUR_APP update --check` to force a check, otherwise it will wait and only check ~once a day.

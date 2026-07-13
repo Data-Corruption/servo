@@ -8,7 +8,7 @@
 # a byte-for-byte mirror of the official release artifacts. All cosign
 # signatures remain valid (they are URL-independent). Mirror installs do not
 # write the release-url file, which disables in-app update checking and remote
-# updates by design. See docs/MIRRORING.md.
+# updates by design. See docs/sprout/MIRRORING.md.
 
 # print logo, i made this with https://manytools.org/hacker-tools/ascii-banner/ <3
 cat << 'EOF'
@@ -304,7 +304,7 @@ install -Dm755 "$gzip_out" "$APP_BIN" || { rc=$?; fatalf 'Failed to install bina
 # The release-url file is what enables in-app update checking and remote
 # updates. It is only written for installs from the official release URL:
 # mirror installs (APP_RELEASE_URL override) must not self-update, since that
-# would execute the mirror's install.sh. See docs/MIRRORING.md.
+# would execute the mirror's install.sh. See docs/sprout/MIRRORING.md.
 if [ "$RELEASE_URL" = "$OFFICIAL_RELEASE_URL" ]; then
     printf 'Writing release source to %s ...\n' "$RELEASE_URL_FILE"
     printf '%s\n' "$RELEASE_URL" > "$RELEASE_URL_FILE" || { rc=$?; fatalf 'Failed to write release URL file (rc=%d)' "$rc"; }

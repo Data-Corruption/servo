@@ -23,7 +23,7 @@
 # Mirrors: there is no build mode for mirrors. Signed release artifacts are
 # portable — copy the release bucket byte-for-byte and install with
 # APP_RELEASE_URL pointing at the copy; all cosign signatures stay valid.
-# See docs/MIRRORING.md.
+# See docs/sprout/MIRRORING.md.
 #
 # Dependencies: go, zig (static musl cross-builds of the release binaries for
 # both arches), gcc (non-fast builds only: go test -race), and curl. Release
@@ -41,22 +41,23 @@ umask 022
 # Config --------------------------------------------------------------
 
 APP_NAME="servo"
-RELEASE_URL="https://cd.example.com/"
+RELEASE_URL="https://cd.servo.regfile.net/"
 CONTACT_URL="https://github.com/Data-Corruption/servo"
+
+DEFAULT_LOG_LEVEL="warn"
+
+SERVICE="true"
+SERVICE_DESC="Servo game server dashboard daemon"
+SERVICE_ARGS="service run"
+SERVICE_DEFAULT_PORT="8829"
+
+# -----------------------------------------------------------------------------
 
 # cosign keyless identity: only releases signed by this exact workflow on main
 # verify. Derived in CI (the only mode that renders the install scripts) and
 # baked in.
 OIDC_ISSUER="https://token.actions.githubusercontent.com"
 CERT_IDENTITY=""
-DEFAULT_LOG_LEVEL="warn"
-
-SERVICE="true"
-SERVICE_DESC="Servo game server dashboard daemon"
-SERVICE_ARGS="service run"
-SERVICE_DEFAULT_PORT="8484"
-
-# -----------------------------------------------------------------------------
 
 TAILWIND_VERSION="${TAILWIND_VERSION:-v4.3.2}"
 DAISYUI_VERSION="${DAISYUI_VERSION:-v5.6.10}"
