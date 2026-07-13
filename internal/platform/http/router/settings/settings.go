@@ -70,6 +70,7 @@ func handleGetSettings(a *app.App) http.HandlerFunc {
 			return
 		}
 
+		perms := middleware.SessionPerms(r)
 		data := map[string]any{
 			"CSS":     a.UI.CSS.URLPath,
 			"JS":      a.UI.JS.URLPath,
@@ -77,7 +78,8 @@ func handleGetSettings(a *app.App) http.HandlerFunc {
 			"Title":   "Settings",
 			"Version": a.BuildInfo().Version,
 			// --- BEGIN UPDATE CHECK ---
-			"UpdateAvailable": cfg.UpdateAvailable && (a.BuildInfo().Version != "vX.X.X"),
+			// only shown to users who can act on it (restart-with-update)
+			"UpdateAvailable": cfg.UpdateAvailable && (a.BuildInfo().Version != "vX.X.X") && perms.Has(types.PermServoControl),
 			// --- END UPDATE CHECK ---
 			//  config fields
 			"LogLevel":  cfg.LogLevel,
@@ -97,8 +99,10 @@ func handleGetSettings(a *app.App) http.HandlerFunc {
 			// game server connection info
 			"GameAddress":  cfg.GameAddress,
 			"GamePassword": cfg.GamePassword,
-			// driver management (admin-only sections)
-			"IsAdmin":             middleware.SessionPerms(r).Has(types.PermAdmin),
+			// permission flags gating template sections
+			"CanServoSettings":    perms.Has(types.PermServoSettings),
+			"CanServoControl":     perms.Has(types.PermServoControl),
+			"IsAdmin":             perms.Has(types.PermAdmin),
 			"Drivers":             drivers,
 			"ActiveDriver":        cfg.ActiveDriver,
 			"LoginBackground":     cfg.LoginBackground,
@@ -142,6 +146,14 @@ func handleUpdateSettings(a *app.App) http.HandlerFunc {
 		if err := dec.Decode(&body); err != nil {
 			xhttp.Error(r.Context(), w, &xhttp.Err{Code: 400, Msg: "bad request", Err: err})
 			return
+		}
+
+		// blur/align belong to the admin-only backgrounds UI
+		if body.BackgroundBlur != nil || body.ContentAlign != nil {
+			if err := middleware.RequirePerm(r, types.PermAdmin); err != nil {
+				xhttp.Error(r.Context(), w, err)
+				return
+			}
 		}
 
 		// validate before touching config

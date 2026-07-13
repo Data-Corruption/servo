@@ -33,9 +33,33 @@ graph LR
 - **Backups** are single compressed archives produced by the driver, retention-pruned, and
   downloadable/restorable from the dashboard. Restore ships in v1 because a backup you've never
   restored is a hope, not a backup.
-- **Permissions** are a bitmask split into `game.*` (control / backup / restore) and `servo.*`
-  (settings / daemon control), plus `admin` for driver activation and background image uploads.
-  Credentials are created via `servo password add --label alice --perms "game.control game.backup"`.
+- **Permissions** are a bitmask split into `game.*` (the game server) and `servo.*` (the
+  dashboard/daemon itself), plus `admin`. See [Permissions](#permissions) below.
+
+## Permissions
+
+Every credential carries a set of permission bits. The UI only shows what the credential can
+actually use, and the API enforces the same bits server-side.
+
+**Every logged-in user** can see the dashboard: game server status, player count/list, the join
+info copy buttons (address/password), the activity panel, and a personal dark-mode toggle in
+settings (a local preference, not a server setting).
+
+| Permission | Grants |
+| --- | --- |
+| `game.control` | Start, stop, restart, and update the game server |
+| `game.backup` | Backup now; see and download the backups list |
+| `game.restore` | Restore a backup — the one destructive action, so it's its own bit |
+| `servo.settings` | The settings page: restart schedule, backups toggle/retention, player warning lead, connection info, global theme override, log level, binds |
+| `servo.control` | Stop, restart, and self-update the Servo daemon (also sees the update-available notice) |
+| `admin` | All of the above, plus driver activation, background images (upload/clear, blur, alignment), and live driver output in the activity panel |
+
+Create credentials with a space-separated perms spec; a leading `!` clears a bit:
+
+```sh
+servo password add --label alice --perms "game.control game.backup"
+servo password add --label bob --perms "admin !game.restore"   # everything except restore
+```
 
 ## Getting started
 

@@ -1,4 +1,5 @@
 {{template "page_start" .}}
+    {{ if .CanServoControl }}
     <!-- Stop Modal -->
     <dialog id="stop-modal" class="modal">
         <div class="modal-box">
@@ -44,6 +45,7 @@
             <button>close</button>
         </form>
     </dialog>
+    {{ end }}
 
     <!-- Main Content Container -->
     <div class="min-h-screen flex items-start justify-center p-4 sm:p-8">
@@ -78,6 +80,7 @@
                 <span>Changes require a restart to take effect</span>
             </div>
 
+            {{ if .CanServoControl }}
             <!-- Daemon Controls Card (Servo itself, not the game server) -->
             <div class="card bg-base-200 shadow-sm">
                 <div class="card-body gap-4">
@@ -104,8 +107,10 @@
                     </div>
                 </div>
             </div>
+            {{ end }}
 
-            <!-- Appearance Card -->
+            <!-- Appearance Card (empty for non-servo.settings users when a theme is forced) -->
+            {{ if or (not .ForcedTheme) .CanServoSettings }}
             <div class="card bg-base-200 shadow-sm">
                 <div class="card-body gap-4">
                     <h2 class="card-title text-base">Appearance</h2>
@@ -115,6 +120,7 @@
                         <input type="checkbox" id="theme-toggle" class="toggle toggle-primary" />
                     </label>
                     {{ end }}
+                    {{ if .CanServoSettings }}
                     <fieldset class="fieldset">
                         <legend class="fieldset-legend">Theme</legend>
                         <div class="flex gap-2 items-center">
@@ -131,9 +137,12 @@
                         <p class="label text-xs">Force a theme for everyone (hides the dark mode toggle). Reloads the
                             page</p>
                     </fieldset>
+                    {{ end }}
                 </div>
             </div>
+            {{ end }}
 
+            {{ if .CanServoSettings }}
             <!-- Connection Info Card -->
             <div class="card bg-base-200 shadow-sm">
                 <div class="card-body gap-4">
@@ -268,6 +277,7 @@
                     </fieldset>
                 </div>
             </div>
+            {{ end }}
 
             {{ if .IsAdmin }}
             <!-- Driver Card (admin) -->
