@@ -29,6 +29,25 @@ SERVER_PASSWORD="changeme"       # empty = no password
 ADMIN_PASSWORD="changeme-admin"  # also the RCON password
 STOP_TIMEOUT=90                  # seconds; Palworld saves on shutdown
 
+# List the server in the in-game community server browser? Case sensitive,
+# must be exactly "true" or "false" (consumed by a shell script in the image).
+# Toggling this requires a reinstall (Install button) to recreate the container.
+#
+# Port exposure per case (router forward + firewalld must match):
+#   COMMUNITY=false (private, friends direct-connect via ip/ddns:GAME_PORT):
+#     - forward/open GAME_PORT/udp only
+#     - QUERY_PORT is not even published on the host (see create_container)
+#   COMMUNITY=true (publicly listed):
+#     - forward/open GAME_PORT/udp AND QUERY_PORT/udp
+#     - set a real SERVER_PASSWORD — the listing makes you discoverable
+#   Either case: RCON (25575) is never published; rcon-cli goes through
+#   podman exec, so nothing to forward and nothing to firewall.
+#
+#   firewalld: sudo firewall-cmd --permanent --add-port=8211/udp
+#              (+ --add-port=27015/udp only if COMMUNITY=true)
+#              sudo firewall-cmd --reload
+COMMUNITY=false
+
 # Game settings. The image regenerates PalWorldSettings.ini from these on
 # every start, so this block is the source of truth — don't edit the ini by
 # hand (it gets overwritten). After changing values here, press Install in
@@ -68,9 +87,13 @@ rcon() { podman exec "$CONTAINER" rcon-cli "$@"; }
 
 create_container() {
   mkdir -p "$DATA"
-  podman create --name "$CONTAINER" \
-    -p "$GAME_PORT:8211/udp" \
-    -p "$QUERY_PORT:27015/udp" \
+  # publish the query port only when the server is publicly listed;
+  # an unpublished port can't be accidentally exposed later
+  set -- -p "$GAME_PORT:8211/udp"
+  if [ "$COMMUNITY" = "true" ]; then
+    set -- "$@" -p "$QUERY_PORT:27015/udp"
+  fi
+  podman create --name "$CONTAINER" "$@" \
     -v "$DATA:/palworld:Z" \
     -e PUID=1000 -e PGID=1000 \
     -e PORT=8211 \
@@ -80,7 +103,7 @@ create_container() {
     -e ADMIN_PASSWORD="$ADMIN_PASSWORD" \
     -e RCON_ENABLED=true \
     -e RCON_PORT=25575 \
-    -e COMMUNITY=false \
+    -e COMMUNITY="$COMMUNITY" \
     -e DEATH_PENALTY="$DEATH_PENALTY" \
     -e EXP_RATE="$EXP_RATE" \
     -e PAL_CAPTURE_RATE="$PAL_CAPTURE_RATE" \

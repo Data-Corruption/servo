@@ -72,7 +72,7 @@ func (s *Scheduler) Run(ctx context.Context) {
 
 		// warn players ahead of the window when configured and applicable
 		lead := time.Duration(cfg.NotifyLeadMinutes) * time.Minute
-		if lead > 0 && window.Sub(time.Now()) > lead {
+		if lead > 0 && time.Until(window) > lead {
 			if !s.sleep(ctx, time.Until(window.Add(-lead))) {
 				return
 			}

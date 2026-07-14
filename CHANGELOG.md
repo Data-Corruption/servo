@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.2.1] - 2026-07-14
+
+Added
+- Confirmation dialogs for Install and Update on the dashboard (Stop and Uninstall already confirmed). Install warns that a re-run may force-stop a running server; Update notes the graceful stop / recreate / restart-if-was-online behavior.
+- `fedora-palworld.sh`: configurable `COMMUNITY` flag. When false (default), the query port is not published on the host; when true, it is published for the in-game community browser. Toggling or changing container env settings still requires pressing Install to recreate the container (data dir preserved).
+
 ## [v0.2.0] - 2026-07-14
 
 Added

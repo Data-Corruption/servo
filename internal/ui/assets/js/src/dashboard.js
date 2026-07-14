@@ -280,6 +280,16 @@ export function initDashboard() {
             btn.addEventListener('click', () => confirmAction(
                 'Stop Server', 'Stop the game server? Connected players will be disconnected.',
                 () => startOp('stop'), 'btn-error'));
+        } else if (op === 'install') {
+            btn.addEventListener('click', () => confirmAction(
+                'Install Server',
+                'Re-run install? Drivers typically recreate their runtime (containers, units, etc.) while keeping the data dir. If the server is running it may be force-stopped — prefer <b>Stop</b> first for a clean save.',
+                () => startOp('install')));
+        } else if (op === 'update') {
+            btn.addEventListener('click', () => confirmAction(
+                'Update Server',
+                'Pull the latest and recreate the runtime? The server will be stopped first (players disconnected). The data dir is typically kept; if it was running it will be started again afterwards.',
+                () => startOp('update')));
         } else if (op === 'uninstall') {
             btn.addEventListener('click', () => confirmAction(
                 'Uninstall Server',
