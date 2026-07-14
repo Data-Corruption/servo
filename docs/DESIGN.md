@@ -59,6 +59,7 @@ contract. Writing a driver = copy, fill in the blanks.
 | `update`            | yes | Update the server/image. **Convention: check the current version first and succeed as a no-op if already up to date** — pressing the button when current must be harmless. Caller guarantees server is stopped. | log output |
 | `backup`            | yes | Archive server data into `$SERVO_BACKUP_DIR` as a **single compressed file** (format is the driver's choice, extension conveys it — `.tar.gz` in practice). Caller guarantees server is stopped. | absolute path of created archive (last line) |
 | `restore <archive>` | no  | Restore server data from the given archive (one previously produced by this driver's `backup`). Caller guarantees server is stopped. | log output |
+| `uninstall`         | no  | Full teardown: remove everything `install`/`update` created outside `$SERVO_DATA_DIR` (containers, images, units...). Caller guarantees server is stopped, and deletes `$SERVO_DATA_DIR` itself afterwards. Backups are kept. | log output |
 | `notify <message>`  | no  | Deliver a message to in-game players (RCON, etc.). | log output |
 | `players`           | no  | List currently connected players. Fast; polled alongside `status`. | one player name per line (count = line count) |
 | `version`           | no  | Print live game server version. | version string |
@@ -98,13 +99,21 @@ written for a future contract version.
 
 Environment provided to every invocation:
 
-- `SERVO_BACKUP_DIR` — where `backup` must write archives.
-- `SERVO_DATA_DIR` — scratch/persistent dir reserved for the driver's own use.
+- `SERVO_BACKUP_DIR` — where `backup` must write archives. Exclusive to this driver: a
+  subdirectory of `~/.servo/backups/` named after the driver file, created by Servo.
+- `SERVO_DATA_DIR` — scratch/persistent dir exclusive to this driver: a subdirectory of
+  `~/.servo/driver-data/` named after the driver file, created by Servo and deleted by Servo
+  after a successful `uninstall`.
 - `SERVO_VERSION` — Servo's version, for drivers that care.
 
+Keying both dirs by driver filename means drivers don't see each other's state, backup retention
+is naturally per-driver, and restore only offers archives the active driver produced.
+The one caveat: renaming a driver file orphans its dirs (the operator moved it, the operator can
+move them too).
+
 Timeouts (Servo kills the process group on expiry): `describe`/`deps`/`status`/`notify`/`players`/
-`version`s get seconds, `start`/`stop` get minutes, `install`/`update`/`backup`/`restore` get a
-generous cap (configurable later if it bites).
+`version`s get seconds, `start`/`stop` get minutes, `install`/`update`/`backup`/`restore`/
+`uninstall` get a generous cap (configurable later if it bites).
 
 ### Installation & activation
 
@@ -117,7 +126,11 @@ generous cap (configurable later if it bites).
   activation is refused and the missing tools are shown. That turns "backup silently failed at
   4am because tar wasn't installed" into a clear error at activation time. Selection is from the
   enumerated dir listing only — never a client-supplied path.
-- Deactivating/switching doesn't touch the old server; drivers own their own resources.
+- Switching drivers is guarded: activation is refused while an operation is running or while the
+  current driver's server is online — one game server at a time, and stopping it is an explicit
+  operator action. (A failed status probe on the outgoing driver doesn't block the switch; a
+  broken driver may be exactly why the operator is switching.) Beyond the guard, switching
+  doesn't touch the old server's resources — install/uninstall remain explicit buttons.
 
 ### Staleness warning
 
@@ -180,7 +193,7 @@ updating stays a deliberate button press.
 ## Backups
 
 - Produced by the driver as single compressed archives (see verb contract), named by the driver,
-  living in `~/.servo/backups/`.
+  living in the driver's own subdirectory of `~/.servo/backups/`.
 - Retention: keep the newest N archives (config, default ~5), pruned by Servo after each
   successful backup.
 - **Download over the UI**: the backups list on the dashboard offers each archive as a download —
@@ -202,8 +215,8 @@ Additions to the standard Sprout home dir:
 ~/.servo/
   db/ logs/ secrets/ tmp/     # from template
   drivers/                    # driver executables, installed via SSH
-  driver-data/                # $SERVO_DATA_DIR handed to drivers
-  backups/                    # $SERVO_BACKUP_DIR, retention-pruned
+  driver-data/<driver>/       # per-driver $SERVO_DATA_DIR
+  backups/<driver>/           # per-driver $SERVO_BACKUP_DIR, retention-pruned
   backgrounds/                # uploaded login/dashboard background images
 ```
 
@@ -222,7 +235,7 @@ mean two different things (daemon restart vs game restart).
   level.
 - `servo.control` — daemon stop/restart/self-update (what the template's `server.control`
   actually gated).
-- `admin` — driver activation, background image upload, all bits.
+- `admin` — driver activation, uninstall, background image upload, all bits.
 
 Deliberately not one bit per verb: nobody grants `start` without `stop`, and granularity you'll
 never exercise is just noise when adding credentials. Bits group by risk tier; splitting one out
@@ -257,6 +270,8 @@ on Fedora via **podman** (ships with Fedora, no extra repo, the image runs fine 
 - `update` — pull the newer image, recreate the container (server already stopped by Servo).
 - `backup` — tar.gz the mounted save data dir into `$SERVO_BACKUP_DIR`.
 - `restore` — wipe the save data dir and untar the given archive over it (server already stopped).
+- `uninstall` — remove the container and image; Servo deletes the data dir (server already
+  stopped).
 - `notify` — `podman exec` the image's bundled rcon-cli to broadcast the message in-game.
 - `players` — rcon-cli `ShowPlayers` (returns CSV of name,playeruid,steamid); print the name
   column, one per line.

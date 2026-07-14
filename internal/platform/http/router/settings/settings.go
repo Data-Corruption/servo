@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"servo/internal/app"
 	"servo/internal/driver"
+	"servo/internal/ops"
 	"servo/internal/platform/database/config"
 	"servo/internal/platform/http/cookies"
 	"servo/internal/platform/http/middleware"
@@ -368,6 +369,8 @@ func handleRestart(a *app.App) http.HandlerFunc {
 // handleActivateDriver activates a driver (admin only): describe validates
 // the API version, deps must pass, then the filename is persisted. Selection
 // is from the enumerated drivers dir only — never a client-supplied path.
+// Switching away from a driver whose server is still online is refused —
+// one game server at a time, and stopping it is an explicit operator action.
 func handleActivateDriver(a *app.App) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
@@ -384,16 +387,22 @@ func handleActivateDriver(a *app.App) http.HandlerFunc {
 			return
 		}
 
-		path, err := driver.Resolve(a.DriversDir, body.Name)
+		if err := a.Ops.GuardSwitch(r.Context(), body.Name); err != nil {
+			switch {
+			case errors.Is(err, ops.ErrBusy):
+				xhttp.Error(r.Context(), w, &xhttp.Err{Code: 409, Msg: "an operation is running — wait for it to finish"})
+			case errors.Is(err, ops.ErrServerOnline):
+				xhttp.Error(r.Context(), w, &xhttp.Err{Code: 409, Msg: "current server is online — stop it before switching drivers"})
+			default:
+				xhttp.Error(r.Context(), w, err)
+			}
+			return
+		}
+
+		env, err := a.Ops.EnvFor(body.Name)
 		if err != nil {
 			xhttp.Error(r.Context(), w, &xhttp.Err{Code: 404, Msg: "driver not found", Err: err})
 			return
-		}
-		env := driver.Env{
-			DriverPath: path,
-			BackupDir:  a.BackupsDir,
-			DataDir:    a.DriverDataDir,
-			AppVersion: a.BuildInfo().Version,
 		}
 		info, missing, err := driver.Validate(r.Context(), env)
 		if err != nil {

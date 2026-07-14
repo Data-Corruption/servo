@@ -107,7 +107,7 @@ function opLabel(op) {
     return {
         start: 'Starting server', stop: 'Stopping server', restart: 'Restarting server',
         update: 'Updating server', backup: 'Backing up', restore: 'Restoring backup',
-        install: 'Installing server',
+        install: 'Installing server', uninstall: 'Uninstalling server',
     }[op] || op || '';
 }
 
@@ -280,6 +280,11 @@ export function initDashboard() {
             btn.addEventListener('click', () => confirmAction(
                 'Stop Server', 'Stop the game server? Connected players will be disconnected.',
                 () => startOp('stop'), 'btn-error'));
+        } else if (op === 'uninstall') {
+            btn.addEventListener('click', () => confirmAction(
+                'Uninstall Server',
+                'This will stop the server, remove everything the driver installed, and <b>delete all server data</b>. Backup archives are kept.',
+                () => startOp('uninstall'), 'btn-error'));
         } else {
             btn.addEventListener('click', () => startOp(op));
         }

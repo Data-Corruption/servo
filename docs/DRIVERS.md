@@ -32,9 +32,14 @@ Every invocation receives:
 
 | Variable | Meaning |
 | --- | --- |
-| `SERVO_BACKUP_DIR` | where `backup` must write archives |
-| `SERVO_DATA_DIR` | scratch/persistent dir reserved for this driver's own use |
+| `SERVO_BACKUP_DIR` | where `backup` must write archives — exclusive to this driver |
+| `SERVO_DATA_DIR` | scratch/persistent dir exclusive to this driver |
 | `SERVO_VERSION` | Servo's version string |
+
+Both dirs are subdirectories (of `~/.servo/backups/` and `~/.servo/driver-data/`) named after the
+driver file, created by Servo before any verb runs. No other driver ever sees them, so use
+`$SERVO_DATA_DIR` directly — no need to carve out your own subdir. Two caveats: renaming a driver
+file orphans its dirs, and `$SERVO_DATA_DIR` is deleted by Servo after a successful `uninstall`.
 
 ## Exit codes
 
@@ -56,6 +61,7 @@ Every invocation receives:
 | `update` | yes | Update the server/image. **Convention: check the current version first and succeed as a no-op if already current.** Server is stopped when called. | log output |
 | `backup` | yes | Write ONE compressed archive into `$SERVO_BACKUP_DIR` (format is yours; extension conveys it). Server is stopped when called. | absolute archive path as the LAST line |
 | `restore <archive>` | no | Restore from an archive previously produced by this driver's `backup`. Server is stopped when called. | log output |
+| `uninstall` | no | Full teardown: remove everything `install`/`update` created **outside** `$SERVO_DATA_DIR` (containers, images, units...). Server is stopped when called; Servo deletes `$SERVO_DATA_DIR` itself afterwards. Backups are kept. | log output |
 | `notify <message>` | no | Deliver a message to in-game players (RCON etc.). Used by the scheduler to warn before restart windows. | log output |
 | `players` | no | List connected players. Polled alongside `status`. | one player name per line |
 | `version` | no | Live game server version. | version string |
@@ -68,7 +74,20 @@ stopped on purpose).
 
 Timeouts (Servo kills the whole process group on expiry): fast verbs (`describe`, `deps`,
 `status`, `notify`, `players`, `version`s) get 30 seconds, `start`/`stop` get 10 minutes,
-`install`/`update`/`backup`/`restore` get 60 minutes.
+`install`/`update`/`backup`/`restore`/`uninstall` get 60 minutes.
+
+## Switching drivers & full reset
+
+Servo runs one game server at a time. Activating a different driver is refused while the current
+driver's server is online — stop it from the dashboard first. Switching never deletes anything:
+the old driver's data/backups/etc stay where they are until you act.
+
+For a full server reset (or before retiring a driver), use the dashboard's **Uninstall** button
+(admin): it stops the server, runs the driver's `uninstall` verb (which should remove containers,
+images, and anything else `install` created), then deletes the driver's data dir. Backup archives
+are deliberately kept — restore-after-reinstall is the recovery path. If a driver doesn't
+implement `uninstall`, the operation fails and cleanup is manual: read the driver to see what
+`install` created, undo that, and remove `~/.servo/driver-data/<driver-name>/`.
 
 ## `describe` output
 

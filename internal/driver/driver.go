@@ -32,6 +32,7 @@ const (
 	VerbInstall          = "install"
 	VerbUpdate           = "update"
 	VerbBackup           = "backup"
+	VerbUninstall        = "uninstall"        // optional
 	VerbRestore          = "restore"          // optional
 	VerbNotify           = "notify"           // optional
 	VerbPlayers          = "players"          // optional
@@ -59,7 +60,7 @@ func timeoutFor(verb string) time.Duration {
 	switch verb {
 	case VerbStart, VerbStop:
 		return stopStartTimeout
-	case VerbInstall, VerbUpdate, VerbBackup, VerbRestore:
+	case VerbInstall, VerbUpdate, VerbBackup, VerbRestore, VerbUninstall:
 		return longTimeout
 	default:
 		return fastTimeout

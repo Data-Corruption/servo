@@ -8,6 +8,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -25,13 +27,14 @@ import (
 type Op string
 
 const (
-	OpStart   Op = "start"
-	OpStop    Op = "stop"
-	OpRestart Op = "restart"
-	OpInstall Op = "install"
-	OpUpdate  Op = "update"
-	OpBackup  Op = "backup"
-	OpRestore Op = "restore"
+	OpStart     Op = "start"
+	OpStop      Op = "stop"
+	OpRestart   Op = "restart"
+	OpInstall   Op = "install"
+	OpUpdate    Op = "update"
+	OpBackup    Op = "backup"
+	OpRestore   Op = "restore"
+	OpUninstall Op = "uninstall"
 )
 
 // ValidOps maps op names to the game.* permission tier they belong to,
@@ -39,12 +42,13 @@ const (
 // them to permission bits.
 var ValidOps = map[Op]bool{
 	OpStart: true, OpStop: true, OpRestart: true, OpInstall: true,
-	OpUpdate: true, OpBackup: true, OpRestore: true,
+	OpUpdate: true, OpBackup: true, OpRestore: true, OpUninstall: true,
 }
 
 var (
-	ErrBusy     = errors.New("an operation is already running")
-	ErrNoDriver = errors.New("no active driver")
+	ErrBusy         = errors.New("an operation is already running")
+	ErrNoDriver     = errors.New("no active driver")
+	ErrServerOnline = errors.New("server is online")
 )
 
 const lastOpKey = "lastOp"
@@ -59,7 +63,9 @@ type Result struct {
 	Tail      string    `json:"tail"` // last chunk of driver output
 }
 
-// Paths tells the runner where driver-related directories live.
+// Paths tells the runner where driver-related directories live. DataDir and
+// BackupsDir are parent roots; each driver gets its own subdirectory of both,
+// named after the driver file (see Runner.EnvFor).
 type Paths struct {
 	DriversDir string
 	DataDir    string
@@ -97,19 +103,32 @@ func (r *Runner) Env() (driver.Env, error) {
 	if err != nil {
 		return driver.Env{}, err
 	}
-	if cfg.ActiveDriver == "" {
+	return r.EnvFor(cfg.ActiveDriver)
+}
+
+// EnvFor resolves a driver name into a driver.Env. Every driver gets its own
+// data and backup subdirectory (keyed by driver filename), created here so
+// drivers and callers can rely on both existing.
+func (r *Runner) EnvFor(name string) (driver.Env, error) {
+	if name == "" {
 		return driver.Env{}, ErrNoDriver
 	}
-	path, err := driver.Resolve(r.paths.DriversDir, cfg.ActiveDriver)
+	path, err := driver.Resolve(r.paths.DriversDir, name)
 	if err != nil {
 		return driver.Env{}, fmt.Errorf("%w: %v", ErrNoDriver, err)
 	}
-	return driver.Env{
+	env := driver.Env{
 		DriverPath: path,
-		BackupDir:  r.paths.BackupsDir,
-		DataDir:    r.paths.DataDir,
+		BackupDir:  filepath.Join(r.paths.BackupsDir, name),
+		DataDir:    filepath.Join(r.paths.DataDir, name),
 		AppVersion: r.paths.AppVersion,
-	}, nil
+	}
+	for _, dir := range []string{env.DataDir, env.BackupDir} {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return driver.Env{}, fmt.Errorf("create driver dir: %w", err)
+		}
+	}
+	return env, nil
 }
 
 // Busy reports whether an operation is currently running.
@@ -117,6 +136,32 @@ func (r *Runner) Busy() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.running
+}
+
+// GuardSwitch reports whether activating driver name is allowed right now:
+// ErrBusy while an operation runs, ErrServerOnline while a *different*
+// active driver's server is online. A failed status probe on the outgoing
+// driver never blocks the switch — a broken driver may be exactly why the
+// operator is switching.
+func (r *Runner) GuardSwitch(ctx context.Context, name string) error {
+	if r.Busy() {
+		return ErrBusy
+	}
+	cfg, err := config.View(r.db)
+	if err != nil {
+		return err
+	}
+	if cfg.ActiveDriver == "" || cfg.ActiveDriver == name {
+		return nil
+	}
+	env, err := r.EnvFor(cfg.ActiveDriver)
+	if err != nil {
+		return nil // unresolvable outgoing driver can't be probed, allow
+	}
+	if status, err := driver.GetStatus(ctx, env); err == nil && status == driver.StatusOnline {
+		return ErrServerOnline
+	}
+	return nil
 }
 
 // Snapshot is the poll payload for the activity panel.
@@ -242,22 +287,60 @@ func (r *Runner) sequence(op Op, args []string, env driver.Env) error {
 			if err := r.step(env, driver.VerbBackup); err != nil {
 				return err
 			}
-			return r.pruneBackups()
+			return r.pruneBackups(env.BackupDir)
 		})
 	case OpRestore:
 		if len(args) != 1 {
 			return fmt.Errorf("restore requires an archive name")
 		}
-		archive, err := ResolveBackup(r.paths.BackupsDir, args[0])
+		archive, err := ResolveBackup(env.BackupDir, args[0])
 		if err != nil {
 			return err
 		}
 		return r.stopDoStart(env, func() error {
 			return r.step(env, driver.VerbRestore, archive)
 		})
+	case OpUninstall:
+		return r.uninstall(env)
 	default:
 		return fmt.Errorf("unknown op %q", op)
 	}
+}
+
+// uninstall stops the server if needed, has the driver tear down everything
+// it created outside $SERVO_DATA_DIR, then removes the driver's data dir.
+// Backups are deliberately kept. The server is never restarted afterwards.
+func (r *Runner) uninstall(env driver.Env) error {
+	r.say("checking server status")
+	status, err := driver.GetStatus(r.ctx, env)
+	if err != nil {
+		return fmt.Errorf("status probe failed: %w", err)
+	}
+	r.say("server is %s", status)
+	if status == driver.StatusOnline {
+		if err := r.step(env, driver.VerbStop); err != nil {
+			return err
+		}
+	}
+
+	r.say("%s", driver.VerbUninstall)
+	code, err := driver.Run(r.ctx, env, r.buf, driver.VerbUninstall)
+	if err != nil {
+		return err
+	}
+	switch code {
+	case driver.ExitOK:
+	case driver.ExitUnsupported:
+		return fmt.Errorf("driver does not support uninstall")
+	default:
+		return fmt.Errorf("uninstall exited %d", code)
+	}
+
+	r.say("removing driver data dir %s", env.DataDir)
+	if err := os.RemoveAll(env.DataDir); err != nil {
+		return fmt.Errorf("remove data dir: %w", err)
+	}
+	return nil
 }
 
 // stopDoStart probes server state, stops it if online, runs fn, and restores

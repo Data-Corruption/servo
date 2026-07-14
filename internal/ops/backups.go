@@ -57,9 +57,10 @@ func ResolveBackup(dir, name string) (string, error) {
 	return "", fmt.Errorf("backup %q not found", name)
 }
 
-// pruneBackups removes archives beyond the configured retention count,
-// keeping the newest N.
-func (r *Runner) pruneBackups() error {
+// pruneBackups removes archives in dir beyond the configured retention
+// count, keeping the newest N. Retention is naturally per-driver since each
+// driver owns its backup dir.
+func (r *Runner) pruneBackups(dir string) error {
 	cfg, err := config.View(r.db)
 	if err != nil {
 		return err
@@ -68,13 +69,13 @@ func (r *Runner) pruneBackups() error {
 	if keep <= 0 {
 		return nil // retention disabled, keep everything
 	}
-	backups, err := ListBackups(r.paths.BackupsDir)
+	backups, err := ListBackups(dir)
 	if err != nil {
 		return err
 	}
 	for _, b := range backups[min(keep, len(backups)):] {
 		r.say("pruning old backup %s", b.Name)
-		if err := os.Remove(filepath.Join(r.paths.BackupsDir, b.Name)); err != nil {
+		if err := os.Remove(filepath.Join(dir, b.Name)); err != nil {
 			return fmt.Errorf("prune %s: %w", b.Name, err)
 		}
 	}

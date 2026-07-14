@@ -63,8 +63,8 @@ type App struct {
 	TempDir    string // (e.g., StorageDir/tmp)
 	// game server dirs (all under StorageDir)
 	DriversDir     string // driver executables, installed over SSH
-	DriverDataDir  string // SERVO_DATA_DIR handed to drivers
-	BackupsDir     string // SERVO_BACKUP_DIR, retention-pruned
+	DriverDataDir  string // parent of per-driver SERVO_DATA_DIR subdirs
+	BackupsDir     string // parent of per-driver SERVO_BACKUP_DIR subdirs, retention-pruned
 	BackgroundsDir string // uploaded login/dashboard background images
 	// --- BEGIN UPDATE CHECK ---
 	ReleaseSource release.ReleaseSource

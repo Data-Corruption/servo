@@ -58,13 +58,16 @@ func handleBackground(a *app.App) http.HandlerFunc {
 	}
 }
 
-// permFor maps an operation to the game.* permission tier that gates it.
+// permFor maps an operation to the permission tier that gates it.
 func permFor(op ops.Op) types.Perm {
 	switch op {
 	case ops.OpBackup:
 		return types.PermGameBackup
 	case ops.OpRestore:
 		return types.PermGameRestore
+	case ops.OpUninstall:
+		// destructive teardown — same trust level as activating drivers
+		return types.PermAdmin
 	default:
 		return types.PermGameControl
 	}
@@ -141,8 +144,17 @@ func handleListBackups(a *app.App) http.HandlerFunc {
 			xhttp.Error(r.Context(), w, err)
 			return
 		}
-		backups, err := ops.ListBackups(a.BackupsDir)
-		if err != nil {
+		var backups []ops.BackupInfo
+		env, err := a.Ops.Env()
+		switch {
+		case err == nil:
+			if backups, err = ops.ListBackups(env.BackupDir); err != nil {
+				xhttp.Error(r.Context(), w, err)
+				return
+			}
+		case errors.Is(err, ops.ErrNoDriver):
+			// no active driver: nothing to list
+		default:
 			xhttp.Error(r.Context(), w, err)
 			return
 		}
@@ -165,7 +177,12 @@ func handleDownloadBackup(a *app.App) http.HandlerFunc {
 			xhttp.Error(r.Context(), w, err)
 			return
 		}
-		path, err := ops.ResolveBackup(a.BackupsDir, chi.URLParam(r, "name"))
+		env, err := a.Ops.Env()
+		if err != nil {
+			xhttp.Error(r.Context(), w, &xhttp.Err{Code: 404, Msg: "backup not found", Err: err})
+			return
+		}
+		path, err := ops.ResolveBackup(env.BackupDir, chi.URLParam(r, "name"))
 		if err != nil {
 			xhttp.Error(r.Context(), w, &xhttp.Err{Code: 404, Msg: "backup not found", Err: err})
 			return

@@ -19,7 +19,7 @@ set -u
 
 IMAGE="docker.io/thijsvanloef/palworld-server-docker:latest"
 CONTAINER="palworld-server"
-DATA="$SERVO_DATA_DIR/palworld"
+DATA="$SERVO_DATA_DIR"  # exclusive to this driver; Servo creates it
 
 GAME_PORT=8211
 QUERY_PORT=27015
@@ -28,6 +28,17 @@ SERVER_NAME="Servo Palworld"
 SERVER_PASSWORD="changeme"       # empty = no password
 ADMIN_PASSWORD="changeme-admin"  # also the RCON password
 STOP_TIMEOUT=90                  # seconds; Palworld saves on shutdown
+
+# Game settings. The image regenerates PalWorldSettings.ini from these on
+# every start, so this block is the source of truth — don't edit the ini by
+# hand (it gets overwritten). After changing values here, press Install in
+# Servo to recreate the container; the data dir (world save) is preserved.
+DEATH_PENALTY="Item"             # None | Item | ItemAndEquipment | All (game default: All)
+EXP_RATE=3.5                     # XP multiplier (default 1); fixes the high-level grind
+PAL_CAPTURE_RATE=1.5             # capture chance multiplier (default 1)
+DAYTIME_SPEEDRATE=1              # >1 = shorter days (default 1)
+NIGHTTIME_SPEEDRATE=1.5          # >1 = shorter nights (default 1)
+PAL_EGG_DEFAULT_HATCHING_TIME=2  # hours for massive eggs (default 72!); values <=1 clamp to 1
 
 # When you verify this driver against a specific image release, pin it here
 # to power Servo's (soft) staleness badge. Empty = badge disabled.
@@ -70,6 +81,12 @@ create_container() {
     -e RCON_ENABLED=true \
     -e RCON_PORT=25575 \
     -e COMMUNITY=false \
+    -e DEATH_PENALTY="$DEATH_PENALTY" \
+    -e EXP_RATE="$EXP_RATE" \
+    -e PAL_CAPTURE_RATE="$PAL_CAPTURE_RATE" \
+    -e DAYTIME_SPEEDRATE="$DAYTIME_SPEEDRATE" \
+    -e NIGHTTIME_SPEEDRATE="$NIGHTTIME_SPEEDRATE" \
+    -e PAL_EGG_DEFAULT_HATCHING_TIME="$PAL_EGG_DEFAULT_HATCHING_TIME" \
     "$IMAGE"
 }
 
@@ -125,6 +142,14 @@ install)
   echo "installed. data dir: $DATA"
   ;;
 
+uninstall)
+  # Server is stopped. Remove what install created outside $SERVO_DATA_DIR;
+  # Servo deletes the data dir itself afterwards (backups are kept).
+  container_exists && { podman rm -f "$CONTAINER" || exit 1; }
+  podman rmi "$IMAGE" 2>/dev/null || true  # may be shared/absent; best effort
+  echo "container and image removed"
+  ;;
+
 update)
   # convention: check first, no-op success if already current
   echo "pulling $IMAGE ..."
@@ -145,7 +170,7 @@ backup)
   [ -d "$DATA" ] || { echo "no data dir to back up" >&2; exit 1; }
   f="$SERVO_BACKUP_DIR/palworld-$(date +%Y%m%d-%H%M%S).tar.gz"
   echo "archiving $DATA ..."
-  tar -czf "$f" -C "$SERVO_DATA_DIR" palworld || { rm -f "$f"; exit 1; }
+  tar -czf "$f" -C "$DATA" . || { rm -f "$f"; exit 1; }
   echo "$f"
   ;;
 
@@ -154,7 +179,8 @@ restore)
   [ -f "$archive" ] || { echo "archive not found: $archive" >&2; exit 1; }
   echo "wiping $DATA and restoring from $archive ..."
   rm -rf "$DATA"
-  tar -xzf "$archive" -C "$SERVO_DATA_DIR" || exit 1
+  mkdir -p "$DATA"
+  tar -xzf "$archive" -C "$DATA" || exit 1
   echo "restored"
   ;;
 

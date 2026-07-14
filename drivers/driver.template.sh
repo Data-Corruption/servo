@@ -11,8 +11,11 @@
 #   scp my-game.sh host:~/.servo/drivers/ && ssh host chmod +x ~/.servo/drivers/my-game.sh
 #
 # Environment provided by Servo on every invocation:
-#   SERVO_BACKUP_DIR   where `backup` must write archives
-#   SERVO_DATA_DIR     scratch/persistent dir reserved for this driver
+#   SERVO_BACKUP_DIR   where `backup` must write archives; exclusive to this
+#                      driver (a subdir named after the driver file)
+#   SERVO_DATA_DIR     scratch/persistent dir exclusive to this driver (a
+#                      subdir named after the driver file); created by Servo,
+#                      deleted by Servo after a successful `uninstall`
 #   SERVO_VERSION      Servo's own version string
 #
 # Exit codes:
@@ -108,6 +111,13 @@ backup)
 restore)
   # Optional. Server is stopped. $2 is an archive previously produced by
   # this driver's `backup`. Delete this case to decline (or keep exit 4).
+  exit 4
+  ;;
+
+uninstall)
+  # Optional. Server is stopped. Remove everything this driver created
+  # OUTSIDE $SERVO_DATA_DIR (containers, images, units...). Servo deletes
+  # $SERVO_DATA_DIR itself afterwards; backups are kept.
   exit 4
   ;;
 

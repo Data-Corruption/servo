@@ -1,5 +1,15 @@
 # Changelog
 
+## [v0.2.0] - 2026-07-14
+
+Added
+- Optional `uninstall` driver verb (Driver API v1): full server teardown from the dashboard (admin). Servo stops the server if needed, the driver removes everything it created outside its data dir (containers, images, ...), then Servo deletes the driver's data dir. Backup archives are kept — restore-after-reinstall is the recovery path. Drivers that don't implement the verb decline with exit 4 and the operation fails with a clear message.
+- `uninstall` implemented in `fedora-palworld.sh` (removes the container and image) and stubbed in `driver.template.sh`.
+
+Changed
+- `SERVO_DATA_DIR` and `SERVO_BACKUP_DIR` are now exclusive per-driver subdirectories (`driver-data/<driver>/`, `backups/<driver>/`), named after the driver file and created by Servo. Drivers no longer need to carve out their own subdir — use the dirs directly. Backup listing, download, restore, and retention pruning are all scoped to the active driver, so switching games can no longer prune or restore another game's archives. Renaming a driver file orphans its dirs. No migration: existing flat-layout data/backups are not picked up.
+- Driver activation is guarded: refused while an operation is running or while the current driver's server is online. Stop the server before switching; a broken driver that fails its status probe never blocks the switch.
+
 ## [v0.1.0] - 2026-07-13
 
 Initial release: a dashboard for managing a dedicated game server, sized for small friend groups.

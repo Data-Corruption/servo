@@ -42,9 +42,10 @@ esac
 `
 
 type fixture struct {
-	runner *Runner
-	data   string
-	backup string
+	runner  *Runner
+	drivers string
+	data    string // the fixture driver's own data dir
+	backup  string // the fixture driver's own backup dir
 }
 
 func newFixture(t *testing.T, script string) *fixture {
@@ -88,7 +89,13 @@ func newFixture(t *testing.T, script string) *fixture {
 		BackupsDir: backups,
 		AppVersion: "vTEST",
 	})
-	return &fixture{runner: runner, data: data, backup: backups}
+	// drivers get per-driver subdirs of the data/backup roots
+	return &fixture{
+		runner:  runner,
+		drivers: drivers,
+		data:    filepath.Join(data, "fixture.sh"),
+		backup:  filepath.Join(backups, "fixture.sh"),
+	}
 }
 
 func (f *fixture) calls(t *testing.T) []string {
@@ -211,7 +218,7 @@ func TestBusyAndFailureRecovery(t *testing.T) {
 
 	// swap in a driver whose update fails, to test start-after-failure
 	failing := strings.Replace(fixtureDriver, `update) echo "updated" ;;`, `update) echo "kaboom" >&2; exit 1 ;;`, 1)
-	path := filepath.Join(filepath.Dir(f.data), "drivers", "fixture.sh")
+	path := filepath.Join(f.drivers, "fixture.sh")
 	if err := os.WriteFile(path, []byte("#!/bin/sh\n"+failing), 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -250,6 +257,88 @@ func TestBusyRejection(t *testing.T) {
 	<-done
 	if f.runner.Busy() {
 		t.Fatal("runner should be idle")
+	}
+}
+
+func TestEnvIsPerDriver(t *testing.T) {
+	f := newFixture(t, fixtureDriver)
+	env, err := f.runner.Env()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if env.DataDir != f.data || env.BackupDir != f.backup {
+		t.Fatalf("env dirs = %q / %q, want %q / %q", env.DataDir, env.BackupDir, f.data, f.backup)
+	}
+	// both dirs are created on resolution
+	for _, d := range []string{env.DataDir, env.BackupDir} {
+		if fi, err := os.Stat(d); err != nil || !fi.IsDir() {
+			t.Fatalf("dir %q not created: %v", d, err)
+		}
+	}
+}
+
+func TestUninstall(t *testing.T) {
+	script := strings.Replace(fixtureDriver, `  *) exit 4 ;;`,
+		"  uninstall) echo \"torn down\" ;;\n  *) exit 4 ;;", 1)
+	f := newFixture(t, script)
+
+	f.runOp(t, OpStart)
+	res := f.runOp(t, OpUninstall)
+	if !res.Success {
+		t.Fatalf("uninstall failed: %+v", res)
+	}
+	// online server gets stopped first, then the verb runs
+	if !strings.Contains(res.Tail, "[servo] stop") || !strings.Contains(res.Tail, "torn down") {
+		t.Fatalf("tail = %q", res.Tail)
+	}
+	// data dir is removed by servo, backups are kept
+	if _, err := os.Stat(f.data); !os.IsNotExist(err) {
+		t.Fatalf("data dir should be removed, stat err = %v", err)
+	}
+	if _, err := os.Stat(f.backup); err != nil {
+		t.Fatalf("backup dir should survive uninstall: %v", err)
+	}
+}
+
+func TestUninstallUnsupported(t *testing.T) {
+	f := newFixture(t, fixtureDriver) // declines unknown verbs with exit 4
+
+	f.runOp(t, OpStart)
+	res := f.runOp(t, OpUninstall)
+	if res.Success {
+		t.Fatal("uninstall should fail when the driver declines it")
+	}
+	if !strings.Contains(res.Detail, "does not support") {
+		t.Fatalf("detail = %q", res.Detail)
+	}
+	// nothing may be deleted on a declined uninstall
+	if _, err := os.Stat(f.data); err != nil {
+		t.Fatalf("data dir should remain: %v", err)
+	}
+}
+
+func TestGuardSwitch(t *testing.T) {
+	f := newFixture(t, fixtureDriver)
+	ctx := context.Background()
+
+	// offline: switching is fine
+	if err := f.runner.GuardSwitch(ctx, "other.sh"); err != nil {
+		t.Fatalf("offline switch refused: %v", err)
+	}
+
+	f.runOp(t, OpStart)
+	// online: switching to a different driver is refused...
+	if err := f.runner.GuardSwitch(ctx, "other.sh"); !errors.Is(err, ErrServerOnline) {
+		t.Fatalf("expected ErrServerOnline, got %v", err)
+	}
+	// ...but re-activating the same driver is not
+	if err := f.runner.GuardSwitch(ctx, "fixture.sh"); err != nil {
+		t.Fatalf("same-driver activation refused: %v", err)
+	}
+
+	f.runOp(t, OpStop)
+	if err := f.runner.GuardSwitch(ctx, "other.sh"); err != nil {
+		t.Fatalf("switch after stop refused: %v", err)
 	}
 }
 
