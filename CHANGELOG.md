@@ -1,5 +1,12 @@
 # Changelog
 
+## [v0.2.2] - 2026-07-14
+
+Added
+
+- Driver convention (docs + template): `start` must launch long-running processes outside Servo's service cgroup (`systemd-run --user --collect --scope -- ...`). systemd's default `KillMode=control-group` otherwise kills the game server — ungracefully — on any Servo stop/restart/self-update. `fedora-palworld.sh` now follows the convention (falls back to an in-cgroup start with a loud warning if scope creation fails) and deps-checks `systemd-run`.
+- Warnings on Servo stop/restart in the settings UI and on the `update` CLI command: a game server started inside Servo's service dies with it if the driver doesn't detach.
+
 ## [v0.2.1] - 2026-07-14
 
 Added

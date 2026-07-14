@@ -76,6 +76,30 @@ Timeouts (Servo kills the whole process group on expiry): fast verbs (`describe`
 `status`, `notify`, `players`, `version`s) get 30 seconds, `start`/`stop` get 10 minutes,
 `install`/`update`/`backup`/`restore`/`uninstall` get 60 minutes.
 
+## `start` must escape Servo's cgroup
+
+Servo normally runs as a systemd user service, and systemd's default `KillMode=control-group`
+kills **every process in the service's cgroup** when the service stops — including anything your
+`start` verb spawned. Without countermeasures, a Servo stop, restart, or self-update takes the
+game server down with it, ungracefully (no save-on-shutdown).
+
+Convention: launch long-running processes in their own transient scope:
+
+```sh
+systemd-run --user --collect --scope -- podman start my-container
+```
+
+This needs the session dbus socket (`$XDG_RUNTIME_DIR/bus`), which exists under any normal
+systemd user session. Verify on your host:
+
+```sh
+systemd-run --user --collect --scope -- true && echo ok
+```
+
+Only processes that must outlive the verb need this — short-lived work inside a verb (pulls,
+tar, RCON calls) is fine as-is. See `fedora-palworld.sh`'s `start` verb for a real example with
+a loud fallback when scope creation fails.
+
 ## Switching drivers & full reset
 
 Servo runs one game server at a time. Activating a different driver is refused while the current

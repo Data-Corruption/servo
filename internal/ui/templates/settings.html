@@ -6,6 +6,8 @@
             <h3 class="font-bold text-lg">Stop Server</h3>
             <p class="py-4 text-base-content/70">Are you sure you want to stop the server? This will stop the service
                 and you will lose access to this page.</p>
+            <p class="pb-4 text-warning text-sm">If the game server was started inside Servo's service (a driver that
+                doesn't detach into its own scope), stopping Servo kills it too — without a graceful save.</p>
             <div class="modal-action">
                 <form method="dialog">
                     <button class="btn btn-ghost">Cancel</button>
@@ -23,6 +25,8 @@
         <div class="modal-box">
             <h3 class="font-bold text-lg">Restart Server</h3>
             <p class="py-4 text-base-content/70">Configure what should happen during the restart.</p>
+            <p class="pb-4 text-warning text-sm">If the game server was started inside Servo's service (a driver that
+                doesn't detach into its own scope), the restart kills it too — without a graceful save.</p>
 
             <!-- --- BEGIN REMOTE UPDATE --- -->
             <label class="label cursor-pointer justify-start gap-4">

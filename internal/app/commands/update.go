@@ -15,6 +15,7 @@ import (
 	"servo/internal/platform/database/config"
 	"servo/internal/types"
 
+	"github.com/Data-Corruption/stdx/xterm/prompt"
 	"github.com/urfave/cli/v3"
 )
 
@@ -82,6 +83,13 @@ var Update = register(func(a *app.App) *cli.Command {
 // REMOTE UPDATE block, delete this function and uncomment the manual variant
 // below it.
 func defaultUpdateAction(a *app.App) error {
+	msg := "Updating restarts the Servo service. A game server started inside the service (a driver that doesn't detach into its own scope) will be killed with it — without a graceful save. Continue?"
+	if yes, err := prompt.YesNo(msg); err != nil {
+		return fmt.Errorf("prompt failed: %w", err)
+	} else if !yes {
+		fmt.Println("Update cancelled.")
+		return nil
+	}
 	if err := a.DeferUpdate(); err != nil {
 		if errors.Is(err, app.ErrUpdatesDisabled) {
 			fmt.Println("This install has updates disabled (no release-url file; mirror install?). Re-run the install script to update.")

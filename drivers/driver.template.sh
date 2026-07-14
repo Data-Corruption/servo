@@ -79,6 +79,11 @@ status)
 
 start)
   # Idempotent: already running = success.
+  #
+  # Convention: launch long-running processes OUTSIDE Servo's cgroup, e.g.
+  #   systemd-run --user --collect --scope -- <your start command>
+  # Otherwise a Servo stop/restart/self-update kills the game server with it
+  # (systemd cleans up the whole service cgroup). See docs/DRIVERS.md.
   echo "TODO: implement start" >&2
   exit 1
   ;;

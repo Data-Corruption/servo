@@ -10,6 +10,9 @@
 # Rootless podman notes:
 #   - The container does NOT auto-start on host reboot. Start it from the
 #     Servo dashboard, or wire up Quadlet yourself if you care.
+#   - `start` launches the container in its own transient systemd scope
+#     (systemd-run) so it lives outside servo.service's cgroup — a Servo
+#     stop/restart/self-update can't take the game down with it.
 #   - Ports >1024 only (8211/27015 are fine).
 #   - -v ...:Z relabels the data dir for SELinux (Fedora default: enforcing).
 
@@ -127,7 +130,7 @@ describe)
   ;;
 
 deps)
-  need podman tar gzip
+  need podman tar gzip systemd-run
   ;;
 
 status)
@@ -143,6 +146,14 @@ start)
     echo "container not found — run install first" >&2
     exit 1
   fi
+  # Start in a transient scope so conmon + the game land OUTSIDE Servo's
+  # service cgroup (systemd's default KillMode=control-group would otherwise
+  # kill them on any Servo stop/restart/self-update). See docs/DRIVERS.md.
+  if systemd-run --user --collect --scope --quiet -- podman start "$CONTAINER"; then
+    exit 0
+  fi
+  echo "WARNING: scope creation failed (session dbus unavailable?)." >&2
+  echo "Starting inside Servo's cgroup — Servo restarts/updates WILL kill the game server." >&2
   podman start "$CONTAINER"
   ;;
 
