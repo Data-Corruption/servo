@@ -45,8 +45,8 @@ function renderGame(game) {
     // players
     const count = $('player-count');
     const list = $('players-list');
-    if (game.playersSupported && status === 'online') {
-        const players = game.players || [];
+    if (game.playersSupported && status === 'online' && Array.isArray(game.players)) {
+        const players = game.players;
         count.textContent = `${players.length} online`;
         count.classList.remove('hidden');
         if (players.length > 0) {
@@ -58,6 +58,15 @@ function renderGame(game) {
     } else {
         count.classList.add('hidden');
         list.classList.add('hidden');
+    }
+
+    // Driver-formatted, intentionally opaque (for example: "60 FPS").
+    const metrics = $('server-metrics');
+    if (status === 'online' && game.metrics) {
+        metrics.textContent = game.metrics;
+        metrics.classList.remove('hidden');
+    } else {
+        metrics.classList.add('hidden');
     }
 
     // versions + staleness

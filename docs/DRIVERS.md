@@ -64,6 +64,7 @@ file orphans its dirs, and `$SERVO_DATA_DIR` is deleted by Servo after a success
 | `uninstall` | no | Full teardown: remove everything `install`/`update` created **outside** `$SERVO_DATA_DIR` (containers, images, units...). Server is stopped when called; Servo deletes `$SERVO_DATA_DIR` itself afterwards. Backups are kept. | log output |
 | `notify <message>` | no | Deliver a message to in-game players (RCON etc.). Used by the scheduler to warn before restart windows. | log output |
 | `players` | no | List connected players. Polled alongside `status`. | one player name per line |
+| `metrics` | no | Compact live server metrics. Polled alongside `status`; formatting belongs to the driver. | one short human-readable line |
 | `version` | no | Live game server version. | version string |
 | `container-version` | no | Live container image version/tag. | version string |
 
@@ -73,7 +74,7 @@ first, runs your verb, and restores the prior state afterwards (it never starts 
 stopped on purpose).
 
 Timeouts (Servo kills the whole process group on expiry): fast verbs (`describe`, `deps`,
-`status`, `notify`, `players`, `version`s) get 30 seconds, `start`/`stop` get 10 minutes,
+`status`, `notify`, `players`, `metrics`, `version`s) get 30 seconds, `start`/`stop` get 10 minutes,
 `install`/`update`/`backup`/`restore`/`uninstall` get 60 minutes.
 
 ## `start` must escape Servo's cgroup
@@ -136,6 +137,8 @@ TARGET_CONTAINER_VERSION=v1.2.3   # optional
 
 - Write for `sh`, not bash, unless you `deps`-check for bash.
 - Make `start`/`stop` idempotent — Servo relies on it.
+- Keep machine-readable data on stdout and diagnostics on stderr. Servo parses
+  only stdout for probe verbs while retaining both streams in failure details.
 - `backup` must print the archive path as its **last** stdout line; log lines before it are fine.
 - Keep `describe`/`deps`/`status` fast and side-effect free; `status` is polled every few seconds
   while the dashboard is open.

@@ -32,11 +32,12 @@ const (
 	VerbInstall          = "install"
 	VerbUpdate           = "update"
 	VerbBackup           = "backup"
-	VerbUninstall        = "uninstall"        // optional
-	VerbRestore          = "restore"          // optional
-	VerbNotify           = "notify"           // optional
-	VerbPlayers          = "players"          // optional
-	VerbVersion          = "version"          // optional
+	VerbUninstall        = "uninstall"         // optional
+	VerbRestore          = "restore"           // optional
+	VerbNotify           = "notify"            // optional
+	VerbPlayers          = "players"           // optional
+	VerbMetrics          = "metrics"           // optional
+	VerbVersion          = "version"           // optional
 	VerbContainerVersion = "container-version" // optional
 )
 
@@ -86,6 +87,13 @@ type Env struct {
 // non-zero exit returns (code, nil) — interpretation is verb-specific and
 // belongs to the caller.
 func Run(ctx context.Context, env Env, out io.Writer, verb string, args ...string) (int, error) {
+	return run(ctx, env, out, out, verb, args...)
+}
+
+// run is the execution primitive. Run deliberately sends both streams to one
+// writer for human-facing operation logs; machine-readable helpers use
+// separate writers so stderr diagnostics can never be parsed as stdout data.
+func run(ctx context.Context, env Env, stdout, stderr io.Writer, verb string, args ...string) (int, error) {
 	ctx, cancel := context.WithTimeout(ctx, timeoutFor(verb))
 	defer cancel()
 
@@ -105,10 +113,8 @@ func Run(ctx context.Context, env Env, out io.Writer, verb string, args ...strin
 		}
 		return nil
 	}
-	if out != nil {
-		cmd.Stdout = out
-		cmd.Stderr = out
-	}
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 
 	err := cmd.Run()
 	if err == nil {

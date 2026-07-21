@@ -75,23 +75,21 @@ func ParseInfo(output []byte) (Info, error) {
 
 // Describe runs the describe verb and parses its output.
 func Describe(ctx context.Context, env Env) (Info, error) {
-	var buf bytes.Buffer
-	code, err := Run(ctx, env, &buf, VerbDescribe)
+	code, stdout, stderr, err := runCaptured(ctx, env, VerbDescribe)
 	if err != nil {
 		return Info{}, err
 	}
 	if code != ExitOK {
-		return Info{}, fmt.Errorf("describe exited %d: %s", code, strings.TrimSpace(buf.String()))
+		return Info{}, exitError(VerbDescribe, code, stdout, stderr)
 	}
-	return ParseInfo(buf.Bytes())
+	return ParseInfo([]byte(stdout))
 }
 
 // Deps runs the deps verb. It returns nil when all dependencies are present,
 // or the list of missing tools (one per stdout line) when the driver reports
 // failure.
 func Deps(ctx context.Context, env Env) ([]string, error) {
-	var buf bytes.Buffer
-	code, err := Run(ctx, env, &buf, VerbDeps)
+	code, stdout, stderr, err := runCaptured(ctx, env, VerbDeps)
 	if err != nil {
 		return nil, err
 	}
@@ -99,13 +97,18 @@ func Deps(ctx context.Context, env Env) ([]string, error) {
 		return nil, nil
 	}
 	var missing []string
-	for _, line := range strings.Split(buf.String(), "\n") {
+	for _, line := range strings.Split(stdout, "\n") {
 		if line = strings.TrimSpace(line); line != "" {
 			missing = append(missing, line)
 		}
 	}
 	if len(missing) == 0 {
-		missing = []string{fmt.Sprintf("deps exited %d without naming missing tools", code)}
+		detail := strings.TrimSpace(stderr)
+		if detail == "" {
+			missing = []string{fmt.Sprintf("deps exited %d without naming missing tools", code)}
+		} else {
+			missing = []string{fmt.Sprintf("deps exited %d without naming missing tools: %s", code, detail)}
+		}
 	}
 	return missing, nil
 }
@@ -133,8 +136,7 @@ func (s Status) String() string {
 // GetStatus runs the status verb: exit 0 = online, 3 = offline (LSB), any
 // other exit is an error.
 func GetStatus(ctx context.Context, env Env) (Status, error) {
-	var buf bytes.Buffer
-	code, err := Run(ctx, env, &buf, VerbStatus)
+	code, stdout, stderr, err := runCaptured(ctx, env, VerbStatus)
 	if err != nil {
 		return StatusUnknown, err
 	}
@@ -144,7 +146,7 @@ func GetStatus(ctx context.Context, env Env) (Status, error) {
 	case ExitStopped:
 		return StatusOffline, nil
 	default:
-		return StatusUnknown, fmt.Errorf("status exited %d: %s", code, strings.TrimSpace(buf.String()))
+		return StatusUnknown, exitError(VerbStatus, code, stdout, stderr)
 	}
 }
 
@@ -155,19 +157,38 @@ var ErrUnsupported = fmt.Errorf("verb not supported by driver")
 // RunOptional runs an optional verb and returns its trimmed output.
 // ErrUnsupported means the driver declined; callers hide the feature.
 func RunOptional(ctx context.Context, env Env, verb string, args ...string) (string, error) {
-	var buf bytes.Buffer
-	code, err := Run(ctx, env, &buf, verb, args...)
+	code, stdout, stderr, err := runCaptured(ctx, env, verb, args...)
 	if err != nil {
 		return "", err
 	}
 	switch code {
 	case ExitOK:
-		return strings.TrimSpace(buf.String()), nil
+		return strings.TrimSpace(stdout), nil
 	case ExitUnsupported:
 		return "", ErrUnsupported
 	default:
-		return "", fmt.Errorf("%s exited %d: %s", verb, code, strings.TrimSpace(buf.String()))
+		return "", exitError(verb, code, stdout, stderr)
 	}
+}
+
+func runCaptured(ctx context.Context, env Env, verb string, args ...string) (int, string, string, error) {
+	var stdout, stderr bytes.Buffer
+	code, err := run(ctx, env, &stdout, &stderr, verb, args...)
+	return code, stdout.String(), stderr.String(), err
+}
+
+func exitError(verb string, code int, stdout, stderr string) error {
+	var detail []string
+	if stdout = strings.TrimSpace(stdout); stdout != "" {
+		detail = append(detail, stdout)
+	}
+	if stderr = strings.TrimSpace(stderr); stderr != "" {
+		detail = append(detail, stderr)
+	}
+	if len(detail) == 0 {
+		return fmt.Errorf("%s exited %d", verb, code)
+	}
+	return fmt.Errorf("%s exited %d: %s", verb, code, strings.Join(detail, "\n"))
 }
 
 // Players runs the players verb: one player name per line.

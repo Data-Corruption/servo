@@ -11,7 +11,8 @@ covers what Servo adds on top.
 ## Goals
 
 - Manage **one game server per install** through a generic driver interface: install, start, stop,
-  restart, update, status, backup, restore, player notification, player count, version reporting.
+  restart, update, status, backup, restore, player notification, player count, compact metrics,
+  version reporting.
 - Drivers are **external executables** implementing a small verb contract, so supporting a new game
   (or a new host distro) never requires rebuilding Servo.
 - Scheduled daily restart window, with optional backups performed during it.
@@ -62,6 +63,7 @@ contract. Writing a driver = copy, fill in the blanks.
 | `uninstall`         | no  | Full teardown: remove everything `install`/`update` created outside `$SERVO_DATA_DIR` (containers, images, units...). Caller guarantees server is stopped, and deletes `$SERVO_DATA_DIR` itself afterwards. Backups are kept. | log output |
 | `notify <message>`  | no  | Deliver a message to in-game players (RCON, etc.). | log output |
 | `players`           | no  | List currently connected players. Fast; polled alongside `status`. | one player name per line (count = line count) |
+| `metrics`           | no  | Print a compact live metrics summary. Fast; polled alongside `status`; the dashboard treats it as opaque. | one short human-readable line |
 | `version`           | no  | Print live game server version. | version string |
 | `container-version` | no  | Print live container image version/tag. Only meaningful if `CONTAINERIZED=true`. | version string |
 
@@ -112,7 +114,7 @@ The one caveat: renaming a driver file orphans its dirs (the operator moved it, 
 move them too).
 
 Timeouts (Servo kills the process group on expiry): `describe`/`deps`/`status`/`notify`/`players`/
-`version`s get seconds, `start`/`stop` get minutes, `install`/`update`/`backup`/`restore`/
+`metrics`/`version`s get seconds, `start`/`stop` get minutes, `install`/`update`/`backup`/`restore`/
 `uninstall` get a generous cap (configurable later if it bites).
 
 ### Installation & activation
@@ -246,9 +248,9 @@ later (e.g. `game.update`) is cheap if it ever matters.
 Two app pages plus the existing settings/login:
 
 - **Dashboard** (`/`): server online/offline, player count/roster when the driver supports
-  `players`, big start/stop/restart buttons, update + backup-now, the activity panel (see job
-  model), versions (driver target vs live) with the staleness badge, backups list with download
-  and restore actions.
+  `players`, a compact driver-formatted metrics summary, big start/stop/restart buttons, update +
+  backup-now, the activity panel (see job model), versions (driver target vs live) with the
+  staleness badge, backups list with download and restore actions.
 - **Settings**: existing template settings + restart time, notify lead time, backups toggle,
   retention count, driver activation (list + activate), background image upload.
 
@@ -265,19 +267,19 @@ on Fedora via **podman** (ships with Fedora, no extra repo, the image runs fine 
 - `install` — pull the image, create the data dir, create (not start) the container with the
   standard mounts/env.
 - `start`/`stop` — `podman start` / `podman stop` (generous stop timeout; Palworld saves on
-  shutdown).
+  shutdown). Start waits for the in-container REST API to report ready.
 - `status` — inspect container running state; map to exit 0/3.
 - `update` — pull the newer image, recreate the container (server already stopped by Servo).
 - `backup` — tar.gz the mounted save data dir into `$SERVO_BACKUP_DIR`.
 - `restore` — wipe the save data dir and untar the given archive over it (server already stopped).
 - `uninstall` — remove the container and image; Servo deletes the data dir (server already
   stopped).
-- `notify` — `podman exec` the image's bundled rcon-cli to broadcast the message in-game.
-- `players` — rcon-cli `ShowPlayers` (returns CSV of name,playeruid,steamid); print the name
-  column, one per line.
+- `notify` — the image's bundled `rest-cli announce`; the REST port remains unpublished.
+- `players` — REST player list, parsed with the image's bundled `jq`; print each Unicode player
+  name intact, one per line.
+- `metrics` — REST server metrics formatted by the driver as a compact summary (`N FPS` today).
 - `container-version` — image tag or `org.opencontainers.image.version` label.
-- `version` — Palworld doesn't expose its version cleanly; exit 4 (unsupported) for now, maybe
-  RCON later.
+- `version` — REST server info version.
 
 One podman-specific wrinkle: rootless podman containers don't auto-start on boot, and the
 `podman generate systemd` / Quadlet story is its own rabbit hole. For v1 the driver just manages
@@ -309,8 +311,10 @@ author.
   per verb. Restore gets its own bit.
 - **`update` checks before updating** (convention): drivers verify the current version and no-op
   successfully if already up to date.
-- **`players` is an optional verb in v1** — the RCON complexity lives in the driver, Servo just
-  counts lines.
+- **`players` is an optional verb in v1** — game-specific query/parsing complexity lives in the
+  driver; Servo just counts lines.
+- **`metrics` is an optional opaque string in v1** — drivers choose a compact useful summary;
+  Servo displays it without compiling in game-specific schemas.
 - **Long ops surface via an activity panel** (verb + animation + elapsed for everyone, live
   output for admins) fed by simple polling. No SSE/WebSockets at this scale.
 

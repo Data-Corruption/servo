@@ -1,5 +1,17 @@
 # Changelog
 
+## [v0.2.3] - 2026-07-21
+
+Added
+
+- Optional driver-formatted `metrics` summary on the dashboard. The Palworld driver currently reports live server FPS.
+- Configurable Palworld base workers and bases-per-guild settings, using the image defaults until edited.
+
+Changed
+
+- Palworld player names, notifications, server version, metrics, and startup readiness now use the container's local REST API instead of RCON. This fixes Unicode player names and prevents timeout diagnostics from appearing in the roster. Existing containers need one Install/recreate to apply the REST and game-setting environment; world data is preserved.
+- Machine-readable driver probes parse stdout only while retaining stderr in failure details. Transient probe failures no longer replace a known server status or wait through the normal cache TTL before retrying.
+
 ## [v0.2.2] - 2026-07-14
 
 Added

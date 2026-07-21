@@ -13,6 +13,8 @@
 #   - `start` launches the container in its own transient systemd scope
 #     (systemd-run) so it lives outside servo.service's cgroup — a Servo
 #     stop/restart/self-update can't take the game down with it.
+#   - --userns=keep-id (podman >= 4.3) maps the host user onto the uid the
+#     server runs as, keeping volume files host-owned (see create_container).
 #   - Ports >1024 only (8211/27015 are fine).
 #   - -v ...:Z relabels the data dir for SELinux (Fedora default: enforcing).
 
@@ -29,8 +31,9 @@ QUERY_PORT=27015
 PLAYERS=16
 SERVER_NAME="Servo Palworld"
 SERVER_PASSWORD="changeme"       # empty = no password
-ADMIN_PASSWORD="changeme-admin"  # also the RCON password
+ADMIN_PASSWORD="changeme-admin"  # used by the in-container REST client
 STOP_TIMEOUT=90                  # seconds; Palworld saves on shutdown
+START_READY_TIMEOUT=300          # seconds to wait for the REST API after start
 
 # List the server in the in-game community server browser? Case sensitive,
 # must be exactly "true" or "false" (consumed by a shell script in the image).
@@ -43,8 +46,8 @@ STOP_TIMEOUT=90                  # seconds; Palworld saves on shutdown
 #   COMMUNITY=true (publicly listed):
 #     - forward/open GAME_PORT/udp AND QUERY_PORT/udp
 #     - set a real SERVER_PASSWORD — the listing makes you discoverable
-#   Either case: RCON (25575) is never published; rcon-cli goes through
-#   podman exec, so nothing to forward and nothing to firewall.
+#   The REST API (8212/tcp) is never published; rest-cli runs inside the
+#   container, so nothing to forward and nothing to firewall.
 #
 #   firewalld: sudo firewall-cmd --permanent --add-port=8211/udp
 #              (+ --add-port=27015/udp only if COMMUNITY=true)
@@ -61,6 +64,10 @@ PAL_CAPTURE_RATE=1.5             # capture chance multiplier (default 1)
 DAYTIME_SPEEDRATE=1              # >1 = shorter days (default 1)
 NIGHTTIME_SPEEDRATE=1.5          # >1 = shorter nights (default 1)
 PAL_EGG_DEFAULT_HATCHING_TIME=2  # hours for massive eggs (default 72!); values <=1 clamp to 1
+# Some Palworld releases write this worker limit to the generated INI but
+# ignore it at runtime unless a matching WorldOption.sav is generated.
+BASE_CAMP_WORKER_MAX_NUM=15      # workers assigned to one base (game default 15)
+BASE_CAMP_MAX_NUM_IN_GUILD=4     # bases allowed per guild (game default 4)
 
 # When you verify this driver against a specific image release, pin it here
 # to power Servo's (soft) staleness badge. Empty = badge disabled.
@@ -85,8 +92,34 @@ container_running() {
   [ "$(podman inspect --format '{{.State.Running}}' "$CONTAINER" 2>/dev/null)" = "true" ]
 }
 
-# rcon-cli is bundled inside the image; only works while running
-rcon() { podman exec "$CONTAINER" rcon-cli "$@"; }
+# The image bundles rest-cli and jq. Keeping JSON parsing in the container
+# avoids adding host dependencies and leaves the REST port unpublished.
+rest() { podman exec "$CONTAINER" rest-cli --no-flush-log "$@"; }
+
+rest_jq() {
+  _api=$1
+  _filter=$2
+  podman exec "$CONTAINER" bash -o pipefail -c \
+    'rest-cli --no-flush-log "$1" | jq -r "$2"' servo-rest "$_api" "$_filter"
+}
+
+wait_ready() {
+  _deadline=$(( $(date +%s) + START_READY_TIMEOUT ))
+  echo "waiting for Palworld REST API (up to ${START_READY_TIMEOUT}s) ..."
+  while container_running; do
+    if _version=$(rest_jq info '.version // empty' 2>/dev/null) && [ -n "$_version" ]; then
+      echo "Palworld REST API ready"
+      return 0
+    fi
+    if [ "$(date +%s)" -ge "$_deadline" ]; then
+      echo "Palworld REST API did not become ready within ${START_READY_TIMEOUT}s" >&2
+      return 1
+    fi
+    sleep 5
+  done
+  echo "container stopped before Palworld REST API became ready" >&2
+  return 1
+}
 
 create_container() {
   mkdir -p "$DATA"
@@ -96,7 +129,12 @@ create_container() {
   if [ "$COMMUNITY" = "true" ]; then
     set -- "$@" -p "$QUERY_PORT:27015/udp"
   fi
+  # keep-id maps the host user onto container uid/gid 1000 (the PUID the
+  # image runs the server as), so files written into the volume are owned by
+  # the host user — without it they land subuid-owned, breaking backup
+  # (unreadable 0700 dirs like Pal/.sentry-native), restore, and uninstall.
   podman create --name "$CONTAINER" "$@" \
+    --userns=keep-id:uid=1000,gid=1000 \
     -v "$DATA:/palworld:Z" \
     -e PUID=1000 -e PGID=1000 \
     -e PORT=8211 \
@@ -104,8 +142,9 @@ create_container() {
     -e SERVER_NAME="$SERVER_NAME" \
     -e SERVER_PASSWORD="$SERVER_PASSWORD" \
     -e ADMIN_PASSWORD="$ADMIN_PASSWORD" \
-    -e RCON_ENABLED=true \
-    -e RCON_PORT=25575 \
+    -e REST_API_ENABLED=true \
+    -e REST_API_PORT=8212 \
+    -e RCON_ENABLED=false \
     -e COMMUNITY="$COMMUNITY" \
     -e DEATH_PENALTY="$DEATH_PENALTY" \
     -e EXP_RATE="$EXP_RATE" \
@@ -113,6 +152,8 @@ create_container() {
     -e DAYTIME_SPEEDRATE="$DAYTIME_SPEEDRATE" \
     -e NIGHTTIME_SPEEDRATE="$NIGHTTIME_SPEEDRATE" \
     -e PAL_EGG_DEFAULT_HATCHING_TIME="$PAL_EGG_DEFAULT_HATCHING_TIME" \
+    -e BASE_CAMP_WORKER_MAX_NUM="$BASE_CAMP_WORKER_MAX_NUM" \
+    -e BASE_CAMP_MAX_NUM_IN_GUILD="$BASE_CAMP_MAX_NUM_IN_GUILD" \
     "$IMAGE"
 }
 
@@ -140,21 +181,21 @@ status)
 start)
   if container_running; then
     echo "already running"
-    exit 0
+  else
+    if ! container_exists; then
+      echo "container not found — run install first" >&2
+      exit 1
+    fi
+    # Start in a transient scope so conmon + the game land OUTSIDE Servo's
+    # service cgroup (systemd's default KillMode=control-group would otherwise
+    # kill them on any Servo stop/restart/self-update). See docs/DRIVERS.md.
+    if ! systemd-run --user --collect --scope --quiet -- podman start "$CONTAINER"; then
+      echo "WARNING: scope creation failed (session dbus unavailable?)." >&2
+      echo "Starting inside Servo's cgroup — Servo restarts/updates WILL kill the game server." >&2
+      podman start "$CONTAINER" || exit 1
+    fi
   fi
-  if ! container_exists; then
-    echo "container not found — run install first" >&2
-    exit 1
-  fi
-  # Start in a transient scope so conmon + the game land OUTSIDE Servo's
-  # service cgroup (systemd's default KillMode=control-group would otherwise
-  # kill them on any Servo stop/restart/self-update). See docs/DRIVERS.md.
-  if systemd-run --user --collect --scope --quiet -- podman start "$CONTAINER"; then
-    exit 0
-  fi
-  echo "WARNING: scope creation failed (session dbus unavailable?)." >&2
-  echo "Starting inside Servo's cgroup — Servo restarts/updates WILL kill the game server." >&2
-  podman start "$CONTAINER"
+  wait_ready
   ;;
 
 stop)
@@ -201,18 +242,22 @@ update)
   ;;
 
 backup)
-  [ -d "$DATA" ] || { echo "no data dir to back up" >&2; exit 1; }
+  # Only Pal/Saved matters: world saves, player data, and ini config. The
+  # rest of $DATA is the steamcmd-installed server (~4.5GB), fully
+  # re-downloadable via Install/Update — archiving it would waste space.
+  [ -d "$DATA/Pal/Saved" ] || { echo "no save data to back up (has the server ever started?)" >&2; exit 1; }
   f="$SERVO_BACKUP_DIR/palworld-$(date +%Y%m%d-%H%M%S).tar.gz"
-  echo "archiving $DATA ..."
-  tar -czf "$f" -C "$DATA" . || { rm -f "$f"; exit 1; }
+  echo "archiving $DATA/Pal/Saved ..."
+  tar -czf "$f" -C "$DATA" Pal/Saved || { rm -f "$f"; exit 1; }
   echo "$f"
   ;;
 
 restore)
   archive="${2:?archive path required}"
   [ -f "$archive" ] || { echo "archive not found: $archive" >&2; exit 1; }
-  echo "wiping $DATA and restoring from $archive ..."
-  rm -rf "$DATA"
+  # Wipe the save data, then extract into $DATA.
+  echo "wiping $DATA/Pal/Saved and restoring from $archive ..."
+  rm -rf "$DATA/Pal/Saved"
   mkdir -p "$DATA"
   tar -xzf "$archive" -C "$DATA" || exit 1
   echo "restored"
@@ -221,15 +266,20 @@ restore)
 notify)
   msg="${2:?message required}"
   container_running || { echo "server offline, skipping notify" >&2; exit 1; }
-  # Palworld's Broadcast mangles spaces; underscores are the accepted hack
-  rcon "Broadcast $(echo "$msg" | tr ' ' '_')"
+  json=$(printf '%s' "$msg" | podman exec -i "$CONTAINER" jq -Rs '{message: .}') || exit 1
+  rest announce "$json"
   ;;
 
 players)
   container_running || exit 1
-  # ShowPlayers prints "name,playeruid,steamid" with a header line.
-  # NOTE: names containing commas will be truncated — cosmetic only.
-  rcon ShowPlayers | tail -n +2 | cut -d',' -f1 | sed '/^$/d'
+  rest_jq players '.players[]?.name // empty'
+  ;;
+
+metrics)
+  container_running || exit 1
+  summary=$(rest_jq metrics '.serverfps | select(type == "number") | "\(.) FPS"') || exit 1
+  [ -n "$summary" ] || { echo "metrics response missing serverfps" >&2; exit 1; }
+  echo "$summary"
   ;;
 
 container-version)
@@ -239,8 +289,10 @@ container-version)
   ;;
 
 version)
-  # Palworld doesn't expose its server version cleanly; decline.
-  exit 4
+  container_running || exit 1
+  ver=$(rest_jq info '.version // empty') || exit 1
+  [ -n "$ver" ] || { echo "info response missing version" >&2; exit 1; }
+  echo "$ver"
   ;;
 
 *)

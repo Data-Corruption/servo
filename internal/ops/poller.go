@@ -15,9 +15,10 @@ type GameState struct {
 	Driver     string      `json:"driver"`     // active driver filename, "" = none
 	DriverInfo driver.Info `json:"driverInfo"` // from describe
 
-	Status  string `json:"status"` // online / offline / unknown
-	Players []string `json:"players,omitempty"`
-	PlayersSupported bool `json:"playersSupported"`
+	Status           string   `json:"status"` // online / offline / unknown
+	Players          []string `json:"players"`
+	PlayersSupported bool     `json:"playersSupported"`
+	Metrics          string   `json:"metrics,omitempty"`
 
 	// live versions (empty when unsupported / unknown)
 	ServerVersion    string `json:"serverVersion"`
@@ -61,8 +62,10 @@ func (p *Poller) Invalidate() {
 }
 
 // Game returns the current cached state, refreshing expired parts unless an
-// operation is running (stale data beats probing a bouncing server).
-func (p *Poller) Game(ctx context.Context) GameState {
+// operation is running (stale data beats probing a bouncing server). Probes
+// use the runner's daemon context: a browser refresh must not cancel and
+// poison shared state that subsequent requests consume.
+func (p *Poller) Game(_ context.Context) GameState {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -80,73 +83,123 @@ func (p *Poller) Game(ctx context.Context) GameState {
 	}
 
 	now := time.Now()
-	p.state.Error = ""
+	probeCtx := p.runner.ctx
+	slowDue := now.Sub(p.versionsAt) > versionTTL
+	fastDue := now.Sub(p.statusAt) > statusTTL
+	if slowDue || fastDue {
+		p.state.Error = ""
+	}
 
-	if now.Sub(p.versionsAt) > versionTTL {
-		p.refreshSlow(ctx, env)
+	if slowDue && p.refreshSlow(probeCtx, env) {
 		p.versionsAt = now
 	}
-	if now.Sub(p.statusAt) > statusTTL {
-		p.refreshFast(ctx, env)
-		p.statusAt = now
+	if fastDue {
+		statusChecked, complete := p.refreshFast(probeCtx, env)
+		if statusChecked {
+			p.state.CheckedAt = now
+		}
+		if complete {
+			p.statusAt = now
+		}
 	}
-	p.state.CheckedAt = now
 	return p.state
 }
 
-func (p *Poller) refreshSlow(ctx context.Context, env driver.Env) {
+func (p *Poller) refreshSlow(ctx context.Context, env driver.Env) bool {
 	info, err := driver.Describe(ctx, env)
 	if err != nil {
-		p.state.Error = err.Error()
-		return
+		p.recordError(err)
+		return false
 	}
 	p.state.DriverInfo = info
 
-	p.state.ServerVersion = optionalOutput(ctx, env, driver.VerbVersion, &p.state.Error)
-	p.state.ContainerVersion = optionalOutput(ctx, env, driver.VerbContainerVersion, &p.state.Error)
+	complete := true
+	if value, ok := optionalOutput(ctx, env, driver.VerbVersion, &p.state.Error); ok {
+		p.state.ServerVersion = value
+	} else {
+		complete = false
+	}
+	if value, ok := optionalOutput(ctx, env, driver.VerbContainerVersion, &p.state.Error); ok {
+		p.state.ContainerVersion = value
+	} else {
+		complete = false
+	}
 
 	p.state.Stale = (info.TargetServerVersion != "" && p.state.ServerVersion != "" && info.TargetServerVersion != p.state.ServerVersion) ||
 		(info.TargetContainerVersion != "" && p.state.ContainerVersion != "" && info.TargetContainerVersion != p.state.ContainerVersion)
+	return complete
 }
 
-func (p *Poller) refreshFast(ctx context.Context, env driver.Env) {
+// refreshFast reports whether status itself was checked and whether all fast
+// probes completed. A transient optional-probe failure retains the status but
+// leaves the TTL expired so the next dashboard poll retries it.
+func (p *Poller) refreshFast(ctx context.Context, env driver.Env) (statusChecked, complete bool) {
 	// Env() succeeded, so ActiveDriver is set; reflect the filename
 	p.state.Driver = filepath.Base(env.DriverPath)
 
 	status, err := driver.GetStatus(ctx, env)
 	if err != nil {
-		p.state.Status = driver.StatusUnknown.String()
-		p.state.Error = err.Error()
-		return
+		if p.state.Status == "" {
+			p.state.Status = driver.StatusUnknown.String()
+		}
+		p.state.Players = nil
+		p.state.Metrics = ""
+		p.recordError(err)
+		return false, false
 	}
 	p.state.Status = status.String()
 
 	if status != driver.StatusOnline {
 		p.state.Players = nil
-		return
+		p.state.Metrics = ""
+		return true, true
 	}
+
+	complete = true
 	players, err := driver.Players(ctx, env)
 	switch {
 	case errors.Is(err, driver.ErrUnsupported):
 		p.state.PlayersSupported = false
 		p.state.Players = nil
 	case err != nil:
-		p.state.Error = err.Error()
+		p.state.Players = nil
+		p.recordError(err)
+		complete = false
 	default:
 		p.state.PlayersSupported = true
 		p.state.Players = players
 	}
+
+	metrics, err := driver.RunOptional(ctx, env, driver.VerbMetrics)
+	switch {
+	case errors.Is(err, driver.ErrUnsupported):
+		p.state.Metrics = ""
+	case err != nil:
+		p.state.Metrics = ""
+		p.recordError(err)
+		complete = false
+	default:
+		p.state.Metrics = metrics
+	}
+	return true, complete
 }
 
 // optionalOutput runs an optional info verb; unsupported or failing verbs
-// yield "" (versions are best-effort, never gates).
-func optionalOutput(ctx context.Context, env driver.Env, verb string, errOut *string) string {
+// yield "". The bool is false only for a real failure, allowing the caller to
+// retry without waiting through the slow-data TTL.
+func optionalOutput(ctx context.Context, env driver.Env, verb string, errOut *string) (string, bool) {
 	out, err := driver.RunOptional(ctx, env, verb)
 	if err != nil {
 		if !errors.Is(err, driver.ErrUnsupported) && *errOut == "" {
 			*errOut = err.Error()
 		}
-		return ""
+		return "", errors.Is(err, driver.ErrUnsupported)
 	}
-	return out
+	return out, true
+}
+
+func (p *Poller) recordError(err error) {
+	if err != nil && p.state.Error == "" {
+		p.state.Error = err.Error()
+	}
 }

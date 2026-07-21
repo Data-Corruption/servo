@@ -186,7 +186,14 @@ esac
 func TestPlayersAndOptional(t *testing.T) {
 	path := writeDriver(t, `
 case "$1" in
-  players) printf 'alice\nbob\n' ;;
+  players)
+    printf 'harmless warning\n' >&2
+    printf 'alice\nbob\n'
+    ;;
+  metrics)
+    printf 'another warning\n' >&2
+    printf '60 FPS\n'
+    ;;
   version) exit 4 ;;
 esac
 `)
@@ -201,8 +208,35 @@ esac
 		t.Fatalf("players = %v", players)
 	}
 
+	metrics, err := RunOptional(ctx, env, VerbMetrics)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if metrics != "60 FPS" {
+		t.Fatalf("metrics = %q", metrics)
+	}
+
 	if _, err := RunOptional(ctx, env, VerbVersion); !errors.Is(err, ErrUnsupported) {
 		t.Fatalf("expected ErrUnsupported, got %v", err)
+	}
+}
+
+func TestCapturedFailureIncludesStderr(t *testing.T) {
+	path := writeDriver(t, `
+case "$1" in
+  players)
+    printf 'partial data\n'
+    printf 'probe failed\n' >&2
+    exit 1
+    ;;
+esac
+`)
+	_, err := Players(context.Background(), testEnv(path))
+	if err == nil {
+		t.Fatal("expected players error")
+	}
+	if got := err.Error(); !strings.Contains(got, "partial data") || !strings.Contains(got, "probe failed") {
+		t.Fatalf("error missing captured output: %q", got)
 	}
 }
 

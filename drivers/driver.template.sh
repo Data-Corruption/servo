@@ -136,6 +136,12 @@ players)
   exit 4
   ;;
 
+metrics)
+  # Optional. Print one short, human-readable server metrics summary line.
+  # Servo displays it verbatim, so keep it compact (for example: "60 FPS").
+  exit 4
+  ;;
+
 version)
   # Optional. Print the live game server version.
   exit 4
