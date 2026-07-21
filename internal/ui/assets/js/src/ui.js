@@ -2,6 +2,7 @@
 // Click blocker, status indicators, and common UI helpers
 
 let bannerTimer = null;
+const bannerClasses = 'alert shadow-lg pointer-events-auto';
 
 /** Show click blocker overlay */
 export function blockClicks() {
@@ -82,7 +83,7 @@ export function showError(statusOrMsg, maybeMsg) {
     }
 }
 
-/** Show a transient banner (requires #dashboard-banner elements; falls back to the error modal) */
+/** Show a transient toast (requires #dashboard-banner elements; falls back to the error modal) */
 export function showBanner(kind, message, timeoutMs = 4000) {
     const banner = document.getElementById('dashboard-banner');
     const messageEl = document.getElementById('dashboard-banner-message');
@@ -98,12 +99,12 @@ export function showBanner(kind, message, timeoutMs = 4000) {
         bannerTimer = null;
     }
 
-    banner.className = `alert alert-${kind}`;
+    banner.className = `${bannerClasses} alert-${kind}`;
     messageEl.textContent = message;
 
     if (timeoutMs > 0) {
         bannerTimer = setTimeout(() => {
-            banner.className = 'alert hidden';
+            banner.className = `${bannerClasses} hidden`;
         }, timeoutMs);
     }
 }

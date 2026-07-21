@@ -21,11 +21,6 @@
         {{ if eq .ContentAlign "left" }}lg:justify-start{{ else if eq .ContentAlign "right" }}lg:justify-end{{ end }}">
         <div class="w-full max-w-2xl space-y-4">
 
-            <!-- Transient banner -->
-            <div id="dashboard-banner" role="alert" class="alert hidden">
-                <span id="dashboard-banner-message"></span>
-            </div>
-
             {{ if not .HasDriver }}
             <div role="alert" class="alert alert-info">
                 <span>No driver activated yet. Drop one into <code class="font-mono">~/.servo/drivers/</code> over SSH,
@@ -129,6 +124,13 @@
                 </div>
             </div>
             {{ end }}
+        </div>
+    </div>
+
+    <!-- Fixed transient notifications; kept outside the content flow. -->
+    <div class="toast toast-end toast-bottom z-50 pointer-events-none">
+        <div id="dashboard-banner" role="alert" class="alert hidden">
+            <span id="dashboard-banner-message"></span>
         </div>
     </div>
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.2.4] - 2026-07-21
+
+Changed
+
+- Moved dashboard alerts into a fixed DaisyUI toast at the bottom-right. Notifications no longer affect page layout.
+
 ## [v0.2.3] - 2026-07-21
 
 Added
